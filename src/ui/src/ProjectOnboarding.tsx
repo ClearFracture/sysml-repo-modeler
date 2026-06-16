@@ -685,7 +685,9 @@ export default function ProjectOnboarding({
             setInventory(finalRepositories);
             setBlockingNotice({
               title: 'Syncing repositories',
-              message: finalFailureCount ? `Sync completed with ${finalFailureCount} failures.` : 'Repository sync complete.',
+              message: finalFailureCount
+                ? `Sync completed with ${finalFailureCount} failures.`
+                : 'Repository sync complete.',
             });
             return;
           }

@@ -389,7 +389,7 @@ def _register_routes(app: FastAPI, services: Services) -> None:
             while True:
                 event = await queue.get()
                 if event is None:
-                    yield "data: {\"type\": \"done\"}\n\n"
+                    yield 'data: {"type": "done"}\n\n'
                     break
                 yield f"data: {json.dumps(event)}\n\n"
 
