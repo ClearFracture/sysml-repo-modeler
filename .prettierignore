@@ -1,0 +1,13 @@
+node_modules
+src/ui/node_modules
+dist
+src/ui/dist
+output
+packages
+backend-data
+src/backend/sysml-backend/sysml_backend.egg-info
+.secrets.baseline
+package-lock.json
+src/ui/package-lock.json
+.env
+.env.*

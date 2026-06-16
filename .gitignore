@@ -1,0 +1,40 @@
+node_modules/
+src/ui/node_modules/
+dist/
+src/ui/dist/
+.vite-dev*.log
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+src/backend/*/.venv/
+src/backend/*/venv/
+
+# Local generated monitoring artifacts.
+output/
+
+# Local backend scratch files.
+backend-scratch/
+
+# Local package workspaces are composed from read-only suite submodules.
+packages/**
+!packages/
+!packages/**/
+packages
+
+# Local environment and deployment secrets.
+.env
+.env.*
+!.env.example
+!.env.windows.example
+
+# Editor / IDE settings.
+.idea/
+.vscode/
+
+# Tooling caches and assistant state.
+.claude*
+.ruff_cache*
+.pytest_cache*

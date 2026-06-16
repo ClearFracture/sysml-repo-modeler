@@ -1,0 +1,41 @@
+repos:
+  # Basic repository hygiene checks.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=10000]
+      - id: check-case-conflict
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: trailing-whitespace
+
+  # Python formatting/linting for the backend.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.8
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^src/backend/sysml-backend/(sysml_backend|tests)/
+      - id: ruff-format
+        files: ^src/backend/sysml-backend/(sysml_backend|tests)/
+
+  # Frontend, docs, and deployment formatting.
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        files: \.(css|html|js|json|jsx|md|ts|tsx|ya?ml)$
+        exclude: (^|/)package-lock\.json$|^\.secrets\.baseline$
+
+  # Detect committed secrets and credentials.
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: (^|/)package-lock\.json$

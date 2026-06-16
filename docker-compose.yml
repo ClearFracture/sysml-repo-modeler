@@ -1,0 +1,100 @@
+# Root-level Docker Compose for Project Analyzer.
+#
+# Brings up all three projects with one command:
+#   - app             : Python backend + the built React UI (single image)
+#   - opencode-server : OpenCode agent runtime
+#   - postgres        : PostgreSQL database
+#
+# A one-shot `migrate` service runs Alembic migrations before the app starts.
+#
+# Usage:
+#   cp .env.example .env   # then set OPENAI_API_KEY
+#   docker compose up --build
+#
+# The UI is served by the app at http://localhost:8080
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sysml}
+      POSTGRES_USER: ${POSTGRES_USER:-sysml}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sysml} # pragma: allowlist secret
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-sysml} -d ${POSTGRES_DB:-sysml}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: src/backend/sysml-backend/Dockerfile
+    image: project-analyzer-app:local
+    command: ['alembic', 'upgrade', 'head']
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://sysml:sysml@postgres:5432/sysml} # pragma: allowlist secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  opencode-server:
+    build:
+      context: .
+      dockerfile: src/agent-workspace/Dockerfile.opencode
+    image: sysml-opencode-server:local
+    environment:
+      OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:-}
+      OPENCODE_LOG_LEVEL: ${OPENCODE_LOG_LEVEL:-INFO}
+      OPENCODE_PRINT_LOGS: ${OPENCODE_PRINT_LOGS:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - app-projects:/workspace/projects:ro
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:4096/global/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: src/backend/sysml-backend/Dockerfile
+    image: project-analyzer-app:local
+    ports:
+      - '8080:8765'
+    environment:
+      BACKEND_LISTEN_HOST: 0.0.0.0
+      BACKEND_LISTEN_PORT: 8765
+      SYSML_BACKEND_SCRATCH_PATH: /tmp/project-analyzer-backend
+      SYSML_BACKEND_LOG_LEVEL: ${SYSML_BACKEND_LOG_LEVEL:-INFO}
+      PROJECT_WORKSPACE_ROOT: /workspace/projects
+      DATABASE_URL: ${DATABASE_URL:-postgres://sysml:sysml@postgres:5432/sysml} # pragma: allowlist secret
+      OPENCODE_BASE_URL: ${OPENCODE_BASE_URL:-http://opencode-server:4096}
+      OPENCODE_HEALTH_PATH: ${OPENCODE_HEALTH_PATH:-/global/health}
+      OPENCODE_WORKSPACE_ROOT: /workspace/projects
+      OPENCODE_TIMEOUT_SECONDS: ${OPENCODE_TIMEOUT_SECONDS:-600}
+      OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:-}
+      OPENCODE_PROVIDER_ID: ${OPENCODE_PROVIDER_ID:-openai}
+      OPENCODE_MODEL_ID: ${OPENCODE_MODEL_ID:-gpt-5.5}
+      OPENCODE_AGENT: ${OPENCODE_AGENT:-}
+    volumes:
+      - app-projects:/workspace/projects
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      opencode-server:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  app-projects:

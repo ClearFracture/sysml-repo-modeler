@@ -1,0 +1,15 @@
+FROM node:24-alpine
+
+WORKDIR /workspace/projects
+
+RUN npm install -g opencode-ai
+
+ENV OPENCODE_CONFIG_DIR=/workspace/config
+ENV OPENCODE_LOG_LEVEL=INFO
+ENV OPENCODE_PRINT_LOGS=false
+
+COPY src/agent-workspace/opencode/opencode.json /workspace/config/opencode.json
+
+EXPOSE 4096
+
+CMD ["sh", "-c", "PRINT_LOGS=''; if [ \"${OPENCODE_PRINT_LOGS:-false}\" = 'true' ]; then PRINT_LOGS='--print-logs'; fi; opencode $PRINT_LOGS --log-level ${OPENCODE_LOG_LEVEL:-INFO} serve --hostname 0.0.0.0 --port 4096"]

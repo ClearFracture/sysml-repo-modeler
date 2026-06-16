@@ -1,0 +1,58 @@
+# Development Docker Compose for Project Analyzer.
+#
+# Starts only the backing services so you can run the backend and frontend from
+# source (see DEVELOPMENT.md) and point them at these containers:
+#   - postgres        : PostgreSQL database, exposed on localhost:5432
+#   - opencode-server : OpenCode agent runtime, exposed on localhost:4096
+#
+# Usage:
+#   cp .env.example .env   # then set OPENAI_API_KEY
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# Then run the app from source against:
+#   DATABASE_URL=postgres://sysml:sysml@localhost:5432/sysml
+#   OPENCODE_BASE_URL=http://localhost:4096
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sysml}
+      POSTGRES_USER: ${POSTGRES_USER:-sysml}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sysml} # pragma: allowlist secret
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-sysml} -d ${POSTGRES_DB:-sysml}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  opencode-server:
+    build:
+      context: .
+      dockerfile: src/agent-workspace/Dockerfile.opencode
+    image: sysml-opencode-server:local
+    environment:
+      OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:-}
+      OPENCODE_LOG_LEVEL: ${OPENCODE_LOG_LEVEL:-INFO}
+      OPENCODE_PRINT_LOGS: ${OPENCODE_PRINT_LOGS:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - '4096:4096'
+    volumes:
+      # Share the source-run backend's project workspace so OpenCode sees the
+      # same files. The backend default PROJECT_WORKSPACE_ROOT is ./packages.
+      - ./packages:/workspace/projects:ro
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:4096/global/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

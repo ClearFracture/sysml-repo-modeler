@@ -1,0 +1,15 @@
+node_modules
+src/ui/node_modules
+dist
+src/ui/dist
+npm-debug.log
+.vite-dev.*.log
+__pycache__
+*.pyc
+.git
+.gitignore
+output
+packages
+backend-data
+.env
+.env.*
