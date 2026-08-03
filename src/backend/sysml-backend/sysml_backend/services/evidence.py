@@ -37,6 +37,29 @@ _SKIP_DIRS = {
     "target",
 }
 
+_NON_RUNTIME_PATH_PARTS = {
+    ".devcontainer",
+    ".github",
+    "bench",
+    "benchmark",
+    "benchmarks",
+    "docs",
+    "example",
+    "examples",
+    "fixture",
+    "fixtures",
+    "test",
+    "testdata",
+    "testing",
+    "tests",
+}
+_DOCUMENTATION_FILENAMES = {
+    "changelog.md",
+    "contributing.md",
+    "history.md",
+    "readme.md",
+}
+
 _SIGNALS: list[tuple[str, str, re.Pattern[str]]] = [
     (
         "deployment",
@@ -172,17 +195,19 @@ def build_repository_evidence(
         if not isinstance(repository, dict):
             continue
         repo_name = _repository_name(repository)
+        repo_role = str(repository.get("role") or "")
         repo_path = _repository_path(repository, workspace_root)
         repo_records: list[dict[str, Any]] = []
         if repo_path and repo_path.exists() and repo_path.is_dir():
             for path in _candidate_files(repo_path):
-                repo_records.extend(_scan_file(repo_name, repo_path, path))
+                repo_records.extend(_scan_file(repo_name, repo_role, repo_path, path))
                 if len(repo_records) >= _MAX_RECORDS_PER_REPOSITORY:
                     repo_records = repo_records[:_MAX_RECORDS_PER_REPOSITORY]
                     break
         by_repository.append(
             {
                 "name": repo_name,
+                "role": repo_role or None,
                 "path": str(repo_path or repository.get("path") or ""),
                 "accessible": bool(
                     repo_path and repo_path.exists() and repo_path.is_dir()
@@ -194,6 +219,18 @@ def build_repository_evidence(
         records.extend(repo_records)
 
     categories = sorted({record["category"] for record in records})
+    platform_records = [
+        record for record in records if record.get("repositoryRole") == "platform"
+    ]
+    coverage_records = platform_records or records
+    required_categories = sorted(
+        {
+            record["category"]
+            for record in coverage_records
+            if record.get("confidence") == "high"
+        }
+    )
+    tentative_categories = sorted(set(categories) - set(required_categories))
     return {
         "summary": {
             "repositoryCount": len(repositories),
@@ -202,7 +239,9 @@ def build_repository_evidence(
             ),
             "recordCount": len(records),
             "categories": categories,
-            "coverageRequirements": coverage_requirements(categories),
+            "requiredCategories": required_categories,
+            "tentativeCategories": tentative_categories,
+            "coverageRequirements": coverage_requirements(required_categories),
         },
         "repositories": by_repository,
         "records": records,
@@ -212,7 +251,10 @@ def build_repository_evidence(
 
 def coverage_requirements(categories: list[str]) -> list[str]:
     return [
-        f"Model {_CATEGORY_LABELS.get(category, category)} evidence when present."
+        (
+            f"Verify and model in-scope {_CATEGORY_LABELS.get(category, category)} "
+            "evidence from canonical runtime or deployment files."
+        )
         for category in categories
         if category != "port"
     ]
@@ -222,22 +264,32 @@ def evidence_prompt_summary(records: list[dict[str, Any]], workspace_root: Path)
     if not records:
         return "No deterministic repository evidence was extracted before synthesis."
 
-    grouped: dict[str, list[dict[str, Any]]] = {}
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for record in records:
-        grouped.setdefault(record["category"], []).append(record)
+        key = (str(record.get("confidence") or "low"), record["category"])
+        grouped.setdefault(key, []).append(record)
 
-    lines = ["Deterministic repository evidence found before synthesis:"]
-    for category in sorted(grouped):
-        category_records = grouped[category][:12]
+    lines = [
+        "Deterministic repository evidence found before synthesis.",
+        "Treat high-confidence records as topology candidates after checking their files.",
+        "Treat medium/low-confidence records as search leads only; they do not prove a deployed component.",
+    ]
+    confidence_rank = {"high": 0, "medium": 1, "low": 2}
+    for confidence, category in sorted(
+        grouped, key=lambda key: (confidence_rank.get(key[0], 9), key[1])
+    ):
+        category_records = _balanced_prompt_records(
+            grouped[(confidence, category)], limit=12
+        )
         label = _CATEGORY_LABELS.get(category, category)
-        lines.append(f"- {label}:")
+        lines.append(f"- {label} ({confidence} confidence):")
         for record in category_records:
             path = _display_path(record, workspace_root)
             lines.append(
                 f"  - {record['repository']}:{path}:{record['line']} "
-                f"{record['kind']} ({record['name']})"
+                f"{record['kind']} ({record['name']}); context={record['context']}"
             )
-        omitted = len(grouped[category]) - len(category_records)
+        omitted = len(grouped[(confidence, category)]) - len(category_records)
         if omitted > 0:
             lines.append(
                 f"  - {omitted} additional {label} evidence record(s) omitted from prompt."
@@ -260,14 +312,21 @@ def _candidate_files(repo_path: Path) -> list[Path]:
     return sorted(
         files,
         key=lambda path: (
-            0 if _is_architecture_file(path) else 1,
+            _context_rank(_evidence_context(path.relative_to(repo_path))),
+            0 if _is_architecture_file(path.relative_to(repo_path)) else 1,
+            _architecture_file_priority(path.relative_to(repo_path)),
             len(path.parts),
             str(path).lower(),
         ),
     )
 
 
-def _scan_file(repository: str, repo_path: Path, path: Path) -> list[dict[str, Any]]:
+def _scan_file(
+    repository: str,
+    repository_role: str,
+    repo_path: Path,
+    path: Path,
+) -> list[dict[str, Any]]:
     if path.stat().st_size > _MAX_FILE_BYTES:
         return []
     try:
@@ -275,6 +334,9 @@ def _scan_file(repository: str, repo_path: Path, path: Path) -> list[dict[str, A
     except UnicodeDecodeError:
         return []
 
+    relative_path = path.relative_to(repo_path)
+    context = _evidence_context(relative_path)
+    confidence = _evidence_confidence(relative_path, context)
     records: list[dict[str, Any]] = []
     for line_number, line in enumerate(lines, 1):
         sanitized = _sanitize_line(line)
@@ -290,9 +352,12 @@ def _scan_file(repository: str, repo_path: Path, path: Path) -> list[dict[str, A
                     "kind": kind,
                     "name": _signal_name(match),
                     "repository": repository,
-                    "path": str(path.relative_to(repo_path)),
+                    "repositoryRole": repository_role or None,
+                    "path": str(relative_path),
                     "line": line_number,
                     "excerpt": sanitized[:180],
+                    "context": context,
+                    "confidence": confidence,
                 }
             )
             break
@@ -358,22 +423,126 @@ def _display_path(record: dict[str, Any], workspace_root: Path) -> str:
 
 
 def _is_architecture_file(path: Path) -> bool:
-    lowered = str(path).lower()
+    filename = path.name.lower()
+    stem = filename.rsplit(".", 1)[0]
+    directory_parts = {part.lower().strip("._-") for part in path.parts[:-1]}
+    if filename == "dockerfile" or filename.endswith(".dockerfile"):
+        return True
+    if filename in {"chart.yaml", "compose.yml", "compose.yaml"}:
+        return True
+    if stem.startswith(("docker-compose", "compose.")):
+        return True
+    if filename.startswith(("httpproxy.", "ingress.", "values.")):
+        return True
+    return bool(
+        directory_parts
+        & {"argo", "deploy", "deployment", "deployments", "helm", "k8s", "kubernetes"}
+    )
+
+
+def _evidence_context(path: Path) -> str:
+    filename = path.name.lower()
+    if any(_is_non_runtime_name(part) for part in (*path.parts[:-1], filename)):
+        return "non_runtime"
+    if filename in _DOCUMENTATION_FILENAMES or path.suffix.lower() == ".md":
+        return "documentation"
+    if _is_architecture_file(path):
+        return "deployment"
+    if path.suffix.lower() in {
+        ".env",
+        ".ini",
+        ".json",
+        ".properties",
+        ".toml",
+        ".yaml",
+        ".yml",
+    }:
+        return "configuration"
+    return "source"
+
+
+def _evidence_confidence(path: Path, context: str) -> str:
+    _ = path
+    if context == "deployment":
+        return "high"
+    if context in {"configuration", "source"}:
+        return "medium"
+    return "low"
+
+
+def _context_rank(context: str) -> int:
+    return {
+        "deployment": 0,
+        "configuration": 1,
+        "source": 2,
+        "documentation": 3,
+        "non_runtime": 4,
+    }.get(context, 5)
+
+
+def _architecture_file_priority(path: Path) -> int:
+    filename = path.name.lower()
+    if filename in {
+        "docker-compose.yml",
+        "docker-compose.yaml",
+        "compose.yml",
+        "compose.yaml",
+    }:
+        return 0
+    if filename == "dockerfile":
+        return 1
+    return 2
+
+
+def _balanced_prompt_records(
+    records: list[dict[str, Any]], *, limit: int
+) -> list[dict[str, Any]]:
+    by_repository: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        by_repository.setdefault(str(record["repository"]), []).append(record)
+
+    selected: list[dict[str, Any]] = []
+    index = 0
+    while len(selected) < limit:
+        added = False
+        for repository_records in by_repository.values():
+            if index < len(repository_records):
+                selected.append(repository_records[index])
+                added = True
+                if len(selected) == limit:
+                    break
+        if not added:
+            break
+        index += 1
+    return selected
+
+
+def _is_non_runtime_name(value: str) -> bool:
+    lowered = value.lower()
+    normalized = lowered.strip("._-")
+    normalized_non_runtime = {part.strip("._-") for part in _NON_RUNTIME_PATH_PARTS}
+    if lowered in _NON_RUNTIME_PATH_PARTS or normalized in normalized_non_runtime:
+        return True
+    if normalized in {"dev", "devcontainer", "development"}:
+        return True
+    tokens = {token for token in re.split(r"[^a-z0-9]+", lowered) if token}
+    if tokens & {
+        "bench",
+        "benchmark",
+        "benchmarks",
+        "dev",
+        "development",
+        "example",
+        "examples",
+        "fixture",
+        "fixtures",
+        "spec",
+        "test",
+        "tests",
+        "testing",
+    }:
+        return True
     return any(
-        term in lowered
-        for term in (
-            "argo",
-            "chart",
-            "compose",
-            "deploy",
-            "deployment",
-            "dockerfile",
-            "helm",
-            "httpproxy",
-            "ingress",
-            "k8s",
-            "kubernetes",
-            "service",
-            "values",
-        )
+        normalized.startswith(prefix)
+        for prefix in ("bench", "example", "fixture", "test")
     )
