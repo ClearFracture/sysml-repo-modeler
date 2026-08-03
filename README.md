@@ -74,7 +74,7 @@ interactive model, inspect its connections, and drill into individual parts.
       <br />
       <strong><a href="https://www.belvederelabs.ai/project-analyzer/openclaw">OpenClaw</a></strong>
       <br />
-      1 repository · 11 parts · 9 connections
+      1 repository · 11 part defs · 9 connections
     </td>
     <td width="50%">
       <a href="https://www.belvederelabs.ai/project-analyzer/supabase-platform">
@@ -83,7 +83,7 @@ interactive model, inspect its connections, and drill into individual parts.
       <br />
       <strong><a href="https://www.belvederelabs.ai/project-analyzer/supabase-platform">Supabase Platform</a></strong>
       <br />
-      5 repositories · 11 parts · 21 connections
+      5 repositories · 11 part defs · 21 connections
     </td>
   </tr>
   <tr>
@@ -94,7 +94,7 @@ interactive model, inspect its connections, and drill into individual parts.
       <br />
       <strong><a href="https://www.belvederelabs.ai/project-analyzer/n8n">n8n</a></strong>
       <br />
-      1 repository · 10 parts · 11 connections
+      1 repository · 10 part defs · 11 connections
     </td>
     <td width="50%">
       <a href="https://www.belvederelabs.ai/project-analyzer/ollama">
@@ -103,7 +103,7 @@ interactive model, inspect its connections, and drill into individual parts.
       <br />
       <strong><a href="https://www.belvederelabs.ai/project-analyzer/ollama">Ollama</a></strong>
       <br />
-      1 repository · 23 parts · 27 connections
+      1 repository · 23 part defs · 27 connections
     </td>
   </tr>
 </table>
