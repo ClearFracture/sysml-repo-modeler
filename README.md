@@ -2,7 +2,7 @@
 
 # Project Analyzer
 
-<img src="assets/screenshot.png" alt="Project Analyzer" width="640" />
+<img src="assets/project-analyzer.webp" alt="Project Analyzer showing a generated SysML v2 architecture model as an interactive graph" width="760" />
 
 **Generate and explore SysML v2 architecture models from multi-repository source code.**
 
@@ -15,7 +15,7 @@
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-[Quick Start](#quick-start) · [Configuration](#configuration) · [Local Development](#local-development) · [Contributing](#contributing)
+[Live Models](#live-models) · [Quick Start](#quick-start) · [Configuration](#configuration) · [Local Development](#local-development) · [Contributing](#contributing)
 
 <br />
 
@@ -40,6 +40,57 @@ elements, trace repository-to-repository connectivity, and review how the pieces
 of a system actually relate. Project Analyzer runs as a self-hosted, full-stack
 application, so your source and the models generated from it stay within your own
 environment.
+
+# Live Models
+
+These models were generated from real source repositories, not drawn by hand.
+Click any image to open the interactive model, inspect its connections, and drill
+into individual parts.
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="https://www.belvederelabs.ai/project-analyzer/openclaw">
+        <img src="assets/examples/openclaw.webp" alt="Generated OpenClaw architecture model" />
+      </a>
+      <br />
+      <strong><a href="https://www.belvederelabs.ai/project-analyzer/openclaw">OpenClaw</a></strong>
+      <br />
+      1 repository · 11 parts · 9 connections
+    </td>
+    <td width="50%">
+      <a href="https://www.belvederelabs.ai/project-analyzer/supabase-platform">
+        <img src="assets/examples/supabase-platform.webp" alt="Generated Supabase Platform architecture model" />
+      </a>
+      <br />
+      <strong><a href="https://www.belvederelabs.ai/project-analyzer/supabase-platform">Supabase Platform</a></strong>
+      <br />
+      5 repositories · 25 parts · 30 connections
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="https://www.belvederelabs.ai/project-analyzer/n8n">
+        <img src="assets/examples/n8n.webp" alt="Generated n8n architecture model" />
+      </a>
+      <br />
+      <strong><a href="https://www.belvederelabs.ai/project-analyzer/n8n">n8n</a></strong>
+      <br />
+      1 repository · 13 parts · 12 connections
+    </td>
+    <td width="50%">
+      <a href="https://www.belvederelabs.ai/project-analyzer/ollama">
+        <img src="assets/examples/ollama.webp" alt="Generated Ollama architecture model" />
+      </a>
+      <br />
+      <strong><a href="https://www.belvederelabs.ai/project-analyzer/ollama">Ollama</a></strong>
+      <br />
+      1 repository · 8 parts · 6 connections
+    </td>
+  </tr>
+</table>
+
+[See how Project Analyzer works](https://www.belvederelabs.ai/project-analyzer)
 
 # Quick Start
 
