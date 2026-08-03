@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Project Analyzer is licensed under the MIT License. Third-party dependencies used
+SysML Repo Modeler is licensed under the MIT License. Third-party dependencies used
 by the application, development tooling, and container images retain their own
 licenses.
 

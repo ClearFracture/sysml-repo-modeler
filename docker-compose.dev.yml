@@ -1,4 +1,4 @@
-# Development Docker Compose for Project Analyzer.
+# Development Docker Compose for SysML Repo Modeler.
 #
 # Starts only the backing services so you can run the backend and frontend from
 # source (see DEVELOPMENT.md) and point them at these containers:
