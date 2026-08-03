@@ -101,7 +101,7 @@ def analysis_system_prompt() -> str:
             "  application, not an outbound dependency on the company or API named by that protocol.",
             "- Omit optional integrations unless the chosen deployment enables them. If an optional integration is",
             "  essential to explaining the architecture, mark it `attribute optional: Boolean = true;`.",
-            "- Every top-level `part def` must include `attribute source: String = \"repo:path\";` pointing to",
+            '- Every top-level `part def` must include `attribute source: String = "repo:path";` pointing to',
             "  the strongest repository-relative runtime, deployment, or configuration file that supports it.",
             "  Do not invent line numbers or source paths.",
             "",

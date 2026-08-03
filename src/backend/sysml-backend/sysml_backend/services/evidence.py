@@ -200,9 +200,7 @@ def build_repository_evidence(
         repo_records: list[dict[str, Any]] = []
         if repo_path and repo_path.exists() and repo_path.is_dir():
             for path in _candidate_files(repo_path):
-                repo_records.extend(
-                    _scan_file(repo_name, repo_role, repo_path, path)
-                )
+                repo_records.extend(_scan_file(repo_name, repo_role, repo_path, path))
                 if len(repo_records) >= _MAX_RECORDS_PER_REPOSITORY:
                     repo_records = repo_records[:_MAX_RECORDS_PER_REPOSITORY]
                     break
@@ -484,7 +482,12 @@ def _context_rank(context: str) -> int:
 
 def _architecture_file_priority(path: Path) -> int:
     filename = path.name.lower()
-    if filename in {"docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"}:
+    if filename in {
+        "docker-compose.yml",
+        "docker-compose.yaml",
+        "compose.yml",
+        "compose.yaml",
+    }:
         return 0
     if filename == "dockerfile":
         return 1
@@ -517,9 +520,7 @@ def _balanced_prompt_records(
 def _is_non_runtime_name(value: str) -> bool:
     lowered = value.lower()
     normalized = lowered.strip("._-")
-    normalized_non_runtime = {
-        part.strip("._-") for part in _NON_RUNTIME_PATH_PARTS
-    }
+    normalized_non_runtime = {part.strip("._-") for part in _NON_RUNTIME_PATH_PARTS}
     if lowered in _NON_RUNTIME_PATH_PARTS or normalized in normalized_non_runtime:
         return True
     if normalized in {"dev", "devcontainer", "development"}:
