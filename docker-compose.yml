@@ -1,4 +1,4 @@
-# Root-level Docker Compose for Project Analyzer.
+# Root-level Docker Compose for SysML Repo Modeler.
 #
 # Brings up all three projects with one command:
 #   - app             : Python backend + the built React UI (single image)

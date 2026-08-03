@@ -1,10 +1,14 @@
 <div align="center">
 
-# Project Analyzer
+# SysML Repo Modeler
 
-<img src="assets/project-analyzer.webp" alt="Project Analyzer showing a generated SysML v2 architecture model as an interactive graph" width="760" />
+<img src="assets/project-analyzer.webp" alt="SysML Repo Modeler showing a generated system model as an interactive architecture graph" width="760" />
 
-**Generate and explore SysML v2 architecture models from multi-repository source code.**
+**Turn one GitHub repository—or many—into an explorable SysML v2 system model.**
+
+A self-hosted AI analysis harness reads the source, traces components and
+connections across repositories, validates the model, and produces both SysML v2
+code and an interactive architecture graph.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
@@ -15,13 +19,13 @@
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-[Live Models](#live-models) · [Quick Start](#quick-start) · [Configuration](#configuration) · [Local Development](#local-development) · [Contributing](#contributing)
+[How It Works](#how-it-works) · [Live Models](#live-models) · [Quick Start](#quick-start) · [Configuration](#configuration) · [Local Development](#local-development) · [Contributing](#contributing)
 
 <br />
 
 </div>
 
-# About Project Analyzer
+# About SysML Repo Modeler
 
 Modern software systems rarely live in a single repository. Architecture is
 spread across many services, libraries, and teams, and the connections between
@@ -29,17 +33,31 @@ them are easy to lose track of — leaving the true shape of a system documented
 only in people's heads. Keeping an accurate, shared picture of how everything
 fits together is one of the hardest parts of working on large systems.
 
-Project Analyzer exists to make that picture explicit. It analyzes multi-repository
-source code with [OpenCode](https://opencode.ai/) and generates formal
-[SysML v2](https://www.omg.org/spec/SysML/) architecture models — turning code
-that already exists into a structured description of the system, rather than a
-diagram that drifts out of date the moment it's drawn.
+SysML Repo Modeler makes that picture explicit. Its AI analysis harness uses
+[OpenCode](https://opencode.ai/) to read one repository or many as a single
+system, then generates a formal [SysML v2](https://www.omg.org/spec/SysML/)
+architecture model from the source.
 
 The result is an interactive graph you can explore: drill into architecture
 elements, trace repository-to-repository connectivity, and review how the pieces
-of a system actually relate. Project Analyzer runs as a self-hosted, full-stack
-application, so your source and the models generated from it stay within your own
-environment.
+of a system actually relate. The application is self-hosted, so your source and
+the models generated from it stay within your own environment.
+
+# How It Works
+
+1. **Sync the repositories.** Add the GitHub repositories that make up the
+   system. Public and private repositories can be analyzed together in one
+   project workspace.
+2. **Read the system as a whole.** OpenCode analyzes the repositories in two
+   passes: first identifying structure and connections, then enriching the model
+   with component purpose and detail.
+3. **Validate and repair.** The harness checks whether the generated SysML v2 is
+   renderable and covers the architecture found in the source. Targeted repair
+   and coverage prompts improve the model without repeating discovery from
+   scratch.
+4. **Explore the result.** Review the generated model as SysML v2 code or as an
+   interactive graph. Search parts and ports, filter connections, and drill into
+   individual components.
 
 # Live Models
 
@@ -90,7 +108,7 @@ into individual parts.
   </tr>
 </table>
 
-[See how Project Analyzer works](https://www.belvederelabs.ai/project-analyzer)
+[Explore SysML Repo Modeler on Belvedere Labs](https://www.belvederelabs.ai/project-analyzer)
 
 # Quick Start
 
@@ -216,7 +234,7 @@ for community expectations.
 
 # License
 
-Project Analyzer is open-source software licensed under the
+SysML Repo Modeler is open-source software licensed under the
 [MIT License](LICENSE).
 
 <details>

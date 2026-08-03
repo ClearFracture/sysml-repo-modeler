@@ -1,4 +1,4 @@
-"""Project Analyzer backend middleware."""
+"""SysML Repo Modeler backend middleware."""
 
 __all__ = ["__version__"]
 

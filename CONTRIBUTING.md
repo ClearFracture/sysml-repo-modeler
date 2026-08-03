@@ -1,4 +1,4 @@
-# Contributing to Project Analyzer
+# Contributing to SysML Repo Modeler
 
 Thank you for your interest in contributing. This document describes how to set
 up your environment, the standards we follow, and how to submit changes.
@@ -75,5 +75,5 @@ npm run build
 ## Reporting Issues
 
 - For bugs and feature requests, open a
-  [GitHub issue](https://github.com/ClearFracture/project-analyzer/issues) with enough
+  [GitHub issue](https://github.com/ClearFracture/Project-Analyzer/issues) with enough
   detail to reproduce or understand the request.
