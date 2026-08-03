@@ -61,9 +61,9 @@ the models generated from it stay within your own environment.
 
 # Live Models
 
-These models were generated from real source repositories, not drawn by hand.
-Click any image to open the interactive model, inspect its connections, and drill
-into individual parts.
+These models were regenerated from pinned source commits and checked against the
+runtime and deployment code—not drawn by hand. Click any image to open the
+interactive model, inspect its connections, and drill into individual parts.
 
 <table>
   <tr>
@@ -83,7 +83,7 @@ into individual parts.
       <br />
       <strong><a href="https://www.belvederelabs.ai/project-analyzer/supabase-platform">Supabase Platform</a></strong>
       <br />
-      5 repositories · 25 parts · 30 connections
+      5 repositories · 11 parts · 21 connections
     </td>
   </tr>
   <tr>
@@ -94,7 +94,7 @@ into individual parts.
       <br />
       <strong><a href="https://www.belvederelabs.ai/project-analyzer/n8n">n8n</a></strong>
       <br />
-      1 repository · 13 parts · 12 connections
+      1 repository · 10 parts · 11 connections
     </td>
     <td width="50%">
       <a href="https://www.belvederelabs.ai/project-analyzer/ollama">
@@ -103,7 +103,7 @@ into individual parts.
       <br />
       <strong><a href="https://www.belvederelabs.ai/project-analyzer/ollama">Ollama</a></strong>
       <br />
-      1 repository · 8 parts · 6 connections
+      1 repository · 23 parts · 27 connections
     </td>
   </tr>
 </table>

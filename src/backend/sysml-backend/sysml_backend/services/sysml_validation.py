@@ -93,6 +93,11 @@ def validate_sysml_model(
         status = "needs_attention"
         warnings.extend(coverage_warnings)
 
+    provenance_warnings = _provenance_warnings(metrics)
+    if provenance_warnings:
+        status = "needs_attention"
+        warnings.extend(provenance_warnings)
+
     direction_warnings = _direction_warnings(sysml_content, metrics)
     if direction_warnings:
         status = "needs_attention"
@@ -123,7 +128,7 @@ def _metrics(sysml_content: str) -> dict[str, int]:
         "chars": len(sysml_content),
         "packages": len(re.findall(r"\bpackage\b", sysml_content)),
         "part_defs": len(re.findall(r"\bpart\s+def\b", sysml_content)),
-        "ports": len(re.findall(r"\bport\b", sysml_content)),
+        "ports": len(re.findall(r"\bport\s+(?!def\b)", sysml_content)),
         "ports_with_direction": len(
             re.findall(r"\bdirection\s*=\s*(?:in|out|both)\s*;", sysml_content)
         ),
@@ -132,6 +137,12 @@ def _metrics(sysml_content: str) -> dict[str, int]:
         ),
         "connects": len(re.findall(r"\bconnect\b", sysml_content)),
         "docs": len(re.findall(r"\bdoc\s*/\*", sysml_content)),
+        "scope_attributes": len(
+            re.findall(r"\battribute\s+scope\s*:\s*String\s*=", sysml_content)
+        ),
+        "source_attributes": len(
+            re.findall(r"\battribute\s+source\s*:\s*String\s*=", sysml_content)
+        ),
         "brace_balance": sysml_content.count("{") - sysml_content.count("}"),
     }
 
@@ -143,7 +154,7 @@ def _coverage_warnings(
     if not evidence:
         return []
     summary = evidence.get("summary", {})
-    categories = summary.get("categories", [])
+    categories = summary.get("requiredCategories", summary.get("categories", []))
     if not isinstance(categories, list):
         return []
 
@@ -157,6 +168,21 @@ def _coverage_warnings(
             warnings.append(
                 f"Evidence includes {category} signals, but the SysML model does not include matching architecture terms."
             )
+    return warnings
+
+
+def _provenance_warnings(metrics: dict[str, int]) -> list[str]:
+    warnings: list[str] = []
+    if metrics["scope_attributes"] == 0:
+        warnings.append(
+            "MonitoredSuite does not declare the concrete deployment or runtime scope."
+        )
+    if metrics["part_defs"] > metrics["source_attributes"]:
+        warnings.append(
+            "Only "
+            f"{metrics['source_attributes']} of {metrics['part_defs']} part definitions "
+            "cite a repository-relative source path."
+        )
     return warnings
 
 
