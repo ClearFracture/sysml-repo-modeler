@@ -54,7 +54,6 @@ sysml_backend = ["static/*", "static/assets/*"]
 [tool.isort]
 profile = "black"
 known_first_party = ["sysml_backend"]
-skip = ["src/backend/sysml-backend/tests"]
 multi_line_output = 3
 include_trailing_comma = true
 force_grid_wrap = 0
