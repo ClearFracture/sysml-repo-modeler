@@ -7,16 +7,15 @@ from pathlib import Path
 # without an editable install.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sysml_backend.utils.env import _parse_env_line  # noqa: E402
-from sysml_backend.utils.mapping import pick  # noqa: E402
 from sysml_backend.services.opencode_client import _extract_sysml_content  # noqa: E402
-from sysml_backend.services.workspace import slugify  # noqa: E402
 from sysml_backend.services.repository_importer import (  # noqa: E402
     _name_from_url,
     _role_directory,
     _safe_name,
 )
-
+from sysml_backend.services.workspace import slugify  # noqa: E402
+from sysml_backend.utils.env import _parse_env_line  # noqa: E402
+from sysml_backend.utils.mapping import pick  # noqa: E402
 
 # ---- env parsing -----------------------------------------------------------
 

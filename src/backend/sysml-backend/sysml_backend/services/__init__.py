@@ -16,6 +16,12 @@ from .repository_importer import (
     import_result_to_json,
 )
 from .run_events import RunEventStore
+from .storage import (
+    DocumentStore,
+    PostgresDocumentStore,
+    ScopedDocumentStore,
+    create_document_store,
+)
 from .sysml_prompts import (
     analysis_prompt,
     analysis_system_prompt,
@@ -24,12 +30,6 @@ from .sysml_prompts import (
     enrichment_prompt,
     repair_prompt,
     repo_lines,
-)
-from .storage import (
-    DocumentStore,
-    PostgresDocumentStore,
-    ScopedDocumentStore,
-    create_document_store,
 )
 from .workspace import (
     PackageWorkspace,

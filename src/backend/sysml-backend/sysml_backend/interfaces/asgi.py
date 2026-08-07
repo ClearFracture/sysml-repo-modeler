@@ -23,16 +23,9 @@ from fastapi import Body, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
-from ..services import (
-    MonitorInProgressError,
-    health_to_json,
-    import_request_from_json,
-)
+from ..services import MonitorInProgressError, health_to_json, import_request_from_json
 from ..utils import BackendConfig, load_config
-from .serializers import (
-    package_registration_to_response,
-    project_to_response,
-)
+from .serializers import package_registration_to_response, project_to_response
 from .server import Services, build_services
 from .status import project_workspace_status, runtime_status
 from .web_common import ALLOWED_ARTIFACTS, is_unsafe_segment
