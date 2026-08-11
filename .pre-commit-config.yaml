@@ -39,3 +39,10 @@ repos:
       - id: detect-secrets
         args: [--baseline, .secrets.baseline]
         exclude: (^|/)package-lock\.json$
+
+  # Python sorting imports.
+  - repo: https://github.com/PyCQA/isort
+    rev: 8.0.1
+    hooks:
+      - id: isort
+        files: ^src/backend/sysml-backend/(sysml_backend|tests)/
