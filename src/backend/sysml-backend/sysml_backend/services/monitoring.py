@@ -377,6 +377,7 @@ class MonitoringService:
         opencode_session_id = opencode_result.session_id
         sysml_content = opencode_result.sysml_content
         tool_errors = list(opencode_result.tool_errors)
+        provider_error = opencode_result.provider_error
         self._flush_opencode_buffers(slug, run_id, package_name)
         sysml_content, validation, tool_errors = self._validate_and_repair_sysml(
             slug=slug,
@@ -388,6 +389,7 @@ class MonitoringService:
             session_id=opencode_session_id,
             sysml_content=sysml_content,
             tool_errors=tool_errors,
+            provider_error=provider_error,
             on_oc_event=on_oc_event,
         )
 
@@ -413,7 +415,20 @@ class MonitoringService:
                 ],
             )
         else:
-            if opencode_session_id:
+            if provider_error:
+                fallback_message = (
+                    f"{provider_error['message']} Writing repository-metadata fallback."
+                )
+                self.event_store.append(
+                    slug,
+                    run_id,
+                    "opencode",
+                    "warn",
+                    fallback_message,
+                    entity=package_name,
+                    reasoning_summary=json.dumps({"error": provider_error}),
+                )
+            elif opencode_session_id:
                 self.event_store.append(
                     slug,
                     run_id,
@@ -496,12 +511,20 @@ class MonitoringService:
         """
 
         def _on_oc_event(phase: str, message: str) -> None:
-            if phase in {"opencode_pass", "opencode_tool_error"}:
+            if phase in {
+                "opencode_pass",
+                "opencode_tool_error",
+                "opencode_provider_error",
+            }:
                 self.event_store.append(
                     slug,
                     run_id,
                     phase,
-                    "warn" if phase == "opencode_tool_error" else "info",
+                    (
+                        "warn"
+                        if phase in {"opencode_tool_error", "opencode_provider_error"}
+                        else "info"
+                    ),
                     message,
                     entity=entity,
                 )
@@ -536,6 +559,7 @@ class MonitoringService:
         session_id: str | None,
         sysml_content: str | None,
         tool_errors: list[dict[str, str]],
+        provider_error: dict[str, Any] | None,
         on_oc_event: Callable[[str, str], None],
     ) -> tuple[str | None, SysmlValidationResult, list[dict[str, str]]]:
         validation = validate_sysml_model(
@@ -543,6 +567,7 @@ class MonitoringService:
             repository_count=repository_count,
             tool_errors=tool_errors,
             evidence=evidence,
+            provider_error=provider_error,
         )
         self._append_validation_event(slug, run_id, package_name, validation)
 

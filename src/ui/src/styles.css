@@ -135,22 +135,29 @@ button:disabled {
 }
 
 .diagram-region {
+  display: flex;
+  flex-direction: column;
   position: relative;
   min-width: 0;
+  min-height: 0;
   border-right: 1px solid #d6e0e2;
 }
 
 .diagram-status {
-  position: absolute;
-  z-index: 5;
-  top: 14px;
-  left: 14px;
-  right: 14px;
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+  padding: 14px;
   pointer-events: none;
+}
+
+.diagram-region .react-flow {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .viewer-selectors,
@@ -670,12 +677,15 @@ button:disabled {
 
 .validation-review-panel {
   width: min(360px, calc(100vw - 48px));
+  max-height: calc(100% - 28px);
+  overflow: auto;
   border: 1px solid #e2c9aa;
   border-radius: 7px;
   padding: 10px 12px;
   background: rgba(255, 250, 244, 0.96);
   color: #4f3822;
   box-shadow: 0 12px 30px rgba(77, 55, 25, 0.12);
+  z-index: 5;
 }
 
 .validation-review-panel__header {

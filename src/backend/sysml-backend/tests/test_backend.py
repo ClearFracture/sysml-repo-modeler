@@ -7,7 +7,10 @@ from pathlib import Path
 # without an editable install.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sysml_backend.services.opencode_client import _extract_sysml_content  # noqa: E402
+from sysml_backend.services.opencode_client import (  # noqa: E402
+    _extract_provider_error,
+    _extract_sysml_content,
+)
 from sysml_backend.services.repository_importer import (  # noqa: E402
     _name_from_url,
     _role_directory,
@@ -88,3 +91,37 @@ def test_extract_sysml_bare_with_preamble():
 
 def test_extract_sysml_none_when_no_model():
     assert _extract_sysml_content(_assistant("I could not find any overlays.")) is None
+
+
+def test_extract_provider_credit_error_without_exposing_response_headers():
+    response = {
+        "info": {
+            "role": "assistant",
+            "providerID": "openai",
+            "error": {
+                "name": "APIError",
+                "data": {
+                    "message": "You have no credits remaining.",
+                    "statusCode": 429,
+                    "responseHeaders": {"set-cookie": "secret"},
+                    "responseBody": (
+                        '{"error":{"type":"insufficient_quota",'
+                        '"code":"credit_balance_exhausted"}}'
+                    ),
+                },
+            },
+        },
+        "parts": [],
+    }
+
+    error = _extract_provider_error(response)
+
+    assert error == {
+        "code": "credit_balance_exhausted",
+        "statusCode": 429,
+        "provider": "openai",
+        "message": (
+            "OpenAI API credits are exhausted. Add credits or configure a "
+            "provider account with available quota."
+        ),
+    }

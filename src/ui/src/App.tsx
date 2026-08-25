@@ -34,7 +34,7 @@ import SysmlPartNode from './SysmlPartNode';
 import { buildExcerptElements, buildTopLevelElements, type BuildContext } from './graph';
 import { layoutElements } from './layout';
 import { getStackedPortGroups } from './portPlacement';
-import { formatRunOutcome, validationReviewFromEvents, type ValidationReview } from './runValidation';
+import { formatRunOptionLabel, formatRunOutcome, isActiveRunStatus, mergeActiveProjectRun, validationReviewFromEvents, type ValidationReview } from './runValidation';
 import { parseSysml } from './sysmlParser';
 import type {
   DiagramEdgeData,
@@ -180,6 +180,7 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectSlug, setSelectedProjectSlug] = useState('');
   const [projectRuns, setProjectRuns] = useState<ProjectRun[]>([]);
+  const [activeRun, setActiveRun] = useState<ProjectRun | undefined>();
   const [selectedRunId, setSelectedRunId] = useState('');
   const [portPlacementOverrides, setPortPlacementOverrides] = useState<Record<string, Record<string, PortPlacement>>>(
     {},
@@ -451,7 +452,29 @@ export default function App() {
 
   const applyProjectRuns = useCallback((runs: ProjectRun[]) => {
     setProjectRuns(runs);
+    setActiveRun((current) => {
+      if (!current) {
+        return undefined;
+      }
+      const activeId = runIdOf(current);
+      return activeId && runs.some((run) => runIdOf(run) === activeId) ? undefined : current;
+    });
   }, []);
+
+  const handleActiveRunChange = useCallback((run: ProjectRun | undefined) => {
+    setActiveRun(run);
+    if (run) {
+      const runId = runIdOf(run);
+      if (runId) {
+        setSelectedRunId(runId);
+      }
+    }
+  }, []);
+
+  const displayProjectRuns = useMemo(
+    () => mergeActiveProjectRun(projectRuns, activeRun),
+    [activeRun, projectRuns],
+  );
 
   const refreshProjects = useCallback(async () => {
     const [projectsResponse, runsResponse] = await Promise.all([
@@ -590,8 +613,8 @@ export default function App() {
   }, [selectedProjectSlug]);
 
   const selectedRun = useMemo(
-    () => projectRuns.find((run) => runIdOf(run) === selectedRunId),
-    [projectRuns, selectedRunId],
+    () => displayProjectRuns.find((run) => runIdOf(run) === selectedRunId),
+    [displayProjectRuns, selectedRunId],
   );
   const selectedProject = useMemo(
     () => projects.find((project) => project.slug === selectedProjectSlug),
@@ -601,6 +624,9 @@ export default function App() {
   useEffect(() => {
     const runId = runIdOf(selectedRun);
     if (!selectedRun || !runId || runId === loadedRunIdRef.current) {
+      return;
+    }
+    if (isActiveRunStatus(selectedRun.status)) {
       return;
     }
     if (!(selectedRun.artifacts ?? []).length) {
@@ -729,6 +755,7 @@ export default function App() {
                       setSelectedProjectSlug(event.target.value);
                       setSelectedRunId('');
                       setProjectRuns([]);
+                      setActiveRun(undefined);
                     }}
                     title="Project"
                     value={selectedProjectSlug}
@@ -745,22 +772,22 @@ export default function App() {
                   </select>
                   <select
                     aria-label="Saved scan"
-                    disabled={!projectRuns.length}
+                    disabled={!displayProjectRuns.length}
                     onChange={(event) => {
                       const runId = event.target.value;
-                      const run = projectRuns.find((candidate) => runIdOf(candidate) === runId);
+                      const run = displayProjectRuns.find((candidate) => runIdOf(candidate) === runId);
                       setSelectedRunId(runId);
-                      if (run) {
+                      if (run && !isActiveRunStatus(run.status)) {
                         loadRunSnapshot(run).catch(() => {});
                       }
                     }}
                     title="Saved scan"
                     value={selectedRunId}
                   >
-                    {projectRuns.length ? (
-                      projectRuns.map((run, index) => (
+                    {displayProjectRuns.length ? (
+                      displayProjectRuns.map((run, index) => (
                         <option key={runIdOf(run) || index} value={runIdOf(run)}>
-                          {formatRunOption(run, index, projectRuns.length)}
+                          {formatRunOption(run, displayProjectRuns)}
                         </option>
                       ))
                     ) : (
@@ -890,10 +917,11 @@ export default function App() {
             selectedProjectSlug={selectedProjectSlug}
             onSelectedProjectSlugChange={setSelectedProjectSlug}
             onProjectsChange={applyProjects}
-            projectRuns={projectRuns}
+            projectRuns={displayProjectRuns}
             selectedRunId={selectedRunId}
             onSelectedRunIdChange={setSelectedRunId}
             onProjectRunsChange={applyProjectRuns}
+            onActiveRunChange={handleActiveRunChange}
           />
         ) : viewMode === 'code' ? (
           <CodeView interconnectionName={sourceName} interconnectionSource={sourceText} />
@@ -983,14 +1011,8 @@ function shortId(value?: string): string {
   return value ? value.slice(0, 8) : 'unknown';
 }
 
-function formatRunOption(run: BackendRun | ProjectRun, index: number, total: number): string {
-  const startedAt = run.startedAt ?? run.started_at;
-  const version = Math.max(1, total - index);
-  const label = index === 0 ? `v${version} latest` : `v${version}`;
-  const date = startedAt ? new Date(startedAt).toLocaleString() : 'unknown date';
-  const status = formatRunOutcome(run.status);
-  const usage = formatRunUsage(run);
-  return usage ? `${label} - ${date} - ${status} - ${usage}` : `${label} - ${date} - ${status}`;
+function formatRunOption(run: BackendRun | ProjectRun, runs: Array<BackendRun | ProjectRun>): string {
+  return formatRunOptionLabel(run, runs);
 }
 
 function countUnresolvedItems(markdown: string) {

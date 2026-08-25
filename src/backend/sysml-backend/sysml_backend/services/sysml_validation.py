@@ -14,6 +14,7 @@ class SysmlValidationResult:
     summary: str
     metrics: dict[str, int]
     warnings: list[str]
+    error: dict[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -25,7 +26,22 @@ def validate_sysml_model(
     repository_count: int,
     tool_errors: list[dict[str, str]],
     evidence: dict[str, Any] | None = None,
+    provider_error: dict[str, Any] | None = None,
 ) -> SysmlValidationResult:
+    if provider_error:
+        message = str(
+            provider_error.get("message") or "The model provider request failed."
+        )
+        return SysmlValidationResult(
+            status="failed",
+            summary=message,
+            metrics=_metrics(sysml_content or ""),
+            warnings=[
+                "The repository was cloned successfully, but SysML generation could not start."
+            ],
+            error=provider_error,
+        )
+
     inaccessible_paths = [
         error
         for error in tool_errors
