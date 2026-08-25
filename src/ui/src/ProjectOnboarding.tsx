@@ -15,7 +15,9 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import {
+  formatRunOptionLabel,
   formatRunOutcome,
+  isActiveRunStatus,
   validationReviewFromEvent,
   validationReviewFromEvents,
   type ValidationReview,
@@ -105,6 +107,17 @@ type OpenCodeMessagePart = {
 
 type OpenCodeMessage = {
   type?: string;
+  info?: {
+    role?: string;
+    providerID?: string;
+    error?: {
+      name?: string;
+      data?: {
+        message?: string;
+        statusCode?: number;
+      };
+    };
+  };
   parts?: OpenCodeMessagePart[];
   input?: Record<string, unknown>;
   tool?: string;
@@ -165,6 +178,7 @@ type ProjectOnboardingProps = {
   selectedRunId: string;
   onSelectedRunIdChange: Dispatch<SetStateAction<string>>;
   onProjectRunsChange: (runs: ProjectRun[]) => void;
+  onActiveRunChange: (run: ProjectRun | undefined) => void;
 };
 
 export default function ProjectOnboarding({
@@ -178,6 +192,7 @@ export default function ProjectOnboarding({
   selectedRunId,
   onSelectedRunIdChange,
   onProjectRunsChange,
+  onActiveRunChange,
 }: ProjectOnboardingProps) {
   const [creatingProject, setCreatingProject] = useState(false);
   const [projectName, setProjectName] = useState('');
@@ -203,6 +218,7 @@ export default function ProjectOnboarding({
   const phaseStartRef = useRef<number | null>(null);
   const runStartRef = useRef<Date | null>(null);
   const selectedProjectSlugRef = useRef(selectedProjectSlug);
+  const activeRunIdRef = useRef('');
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.slug === selectedProjectSlug),
@@ -218,6 +234,7 @@ export default function ProjectOnboarding({
     [projectRuns, selectedRunId],
   );
   const selectedRunReview = useMemo(() => validationReviewFromEvents(events), [events]);
+  const selectedRunIsActive = isActiveRunStatus(selectedRun?.status);
 
   const refreshProjects = useCallback(async () => {
     const response = await fetch(`${backendBaseUrl}/api/projects`);
@@ -248,7 +265,9 @@ export default function ProjectOnboarding({
       const runs = payload.runs ?? [];
       onProjectRunsChange(runs);
       onSelectedRunIdChange((current) =>
-        current && runs.some((run) => runIdOf(run) === current) ? current : runIdOf(runs[0]) || '',
+        current && (current === activeRunIdRef.current || runs.some((run) => runIdOf(run) === current))
+          ? current
+          : runIdOf(runs[0]) || '',
       );
     },
     [backendBaseUrl, onProjectRunsChange, onSelectedRunIdChange],
@@ -284,12 +303,33 @@ export default function ProjectOnboarding({
   );
 
   const connectToRun = useCallback(
-    (runId: string) => {
+    (runId: string, options?: { reconnect?: boolean; initialStatus?: string }) => {
       eventSourceRef.current?.close();
       setEvents([]);
       setBusy(true);
       runStartRef.current = null;
-      setStatus('Reconnecting to running scan...');
+      setStatus(options?.reconnect ? 'Reconnecting to running scan...' : 'Scan started');
+
+      // Put the live run in front of the user straight away: add it to the run
+      // dropdown as the selected entry and show its events, rather than leaving
+      // the previous scan's results and diagnostics on screen.
+      activeRunIdRef.current = runId;
+      onActiveRunChange({
+        runId,
+        run_id: runId,
+        status: options?.initialStatus ?? 'running',
+        startedAt: new Date().toISOString(),
+        started_at: new Date().toISOString(),
+        artifacts: [],
+      });
+      onSelectedRunIdChange(runId);
+      setSessionsView(false);
+      setSelectedSession(undefined);
+
+      const clearActiveRun = () => {
+        activeRunIdRef.current = '';
+        onActiveRunChange(undefined);
+      };
 
       const es = new EventSource(`${backendBaseUrl}/api/runs/${runId}/events/stream`);
       eventSourceRef.current = es;
@@ -331,13 +371,12 @@ export default function ProjectOnboarding({
             onProjectRunsChange(runs);
             if (completed) {
               onSelectedRunIdChange(runId);
-              if (completed.opencodeSessionId) {
-                inspectSession(completed.opencodeSessionId).catch(() => {});
-                setSessionsView(true);
-              }
             }
+            clearActiveRun();
           })
-          .catch(() => {});
+          .catch(() => {
+            clearActiveRun();
+          });
       });
 
       es.onerror = () => {
@@ -345,9 +384,10 @@ export default function ProjectOnboarding({
         eventSourceRef.current = null;
         setBusy(false);
         setStatus('Stream closed');
+        clearActiveRun();
       };
     },
-    [backendBaseUrl, inspectSession, onProjectRunsChange, onSelectedRunIdChange],
+    [backendBaseUrl, onActiveRunChange, onProjectRunsChange, onSelectedRunIdChange],
   );
 
   useEffect(() => {
@@ -372,13 +412,17 @@ export default function ProjectOnboarding({
       .then((r) => (r.ok ? r.json() : null))
       .then((payload) => {
         const runIds = (payload as { runIds?: string[] } | null)?.runIds ?? [];
-        if (runIds[0]) connectToRun(runIds[0]);
+        if (runIds[0]) connectToRun(runIds[0], { reconnect: true });
       })
       .catch(() => {});
     return () => {
       eventSourceRef.current?.close();
+      // App keeps the synthetic run visible across view changes. A remount
+      // reconnects to an inflight run, while App polling replaces a completed
+      // run with the persisted record.
+      activeRunIdRef.current = '';
     };
-  }, [backendBaseUrl, connectToRun, refreshProjects, refreshRuntimeStatus]);
+  }, [backendBaseUrl, connectToRun, onActiveRunChange, refreshProjects, refreshRuntimeStatus]);
 
   useEffect(() => {
     setInventory(selectedProject?.repositories ?? []);
@@ -404,13 +448,13 @@ export default function ProjectOnboarding({
   }, [onProjectRunsChange, onSelectedRunIdChange, refreshProjectRuns, selectedProjectSlug]);
 
   useEffect(() => {
-    const runId = runIdOf(selectedRun);
+    const runId = runIdOf(selectedRun) || selectedRunId;
     if (!runId) {
       setEvents([]);
       runStartRef.current = null;
       return;
     }
-    if (busy) {
+    if (busy || isActiveRunStatus(selectedRun?.status)) {
       return;
     }
     fetch(`${backendBaseUrl}/api/runs/${runId}/events`)
@@ -425,7 +469,7 @@ export default function ProjectOnboarding({
         setEvents([]);
         runStartRef.current = null;
       });
-  }, [backendBaseUrl, busy, selectedRun]);
+  }, [backendBaseUrl, busy, selectedRun, selectedRunId]);
 
   useEffect(() => {
     if (busy) {
@@ -755,7 +799,7 @@ export default function ProjectOnboarding({
         setBusy(false);
         return;
       }
-      connectToRun(runId);
+      connectToRun(runId, { initialStatus: run.status });
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Scan failed');
       setBusy(false);
@@ -1068,7 +1112,9 @@ export default function ProjectOnboarding({
                   const runId = event.target.value;
                   const run = projectRuns.find((candidate) => runIdOf(candidate) === runId);
                   onSelectedRunIdChange(runId);
-                  if (run) {
+                  setSessionsView(false);
+                  setSelectedSession(undefined);
+                  if (run && !isActiveRunStatus(run.status)) {
                     onLoadRunSnapshot(run).catch((error) =>
                       setStatus(error instanceof Error ? error.message : 'Failed to load run snapshot'),
                     );
@@ -1080,7 +1126,7 @@ export default function ProjectOnboarding({
                 {projectRuns.length ? (
                   projectRuns.map((run, index) => (
                     <option key={runIdOf(run) || index} value={runIdOf(run)}>
-                      {formatRunOption(run, index, projectRuns.length)}
+                      {formatRunOption(run, projectRuns)}
                     </option>
                   ))
                 ) : (
@@ -1148,7 +1194,21 @@ export default function ProjectOnboarding({
             </div>
           </div>
 
-          {selectedRun ? (
+          {selectedRun && selectedRunIsActive ? (
+            <div className="opencode-card">
+              <div className="opencode-card-icon">
+                <Loader2 className="spin" size={18} />
+              </div>
+              <div>
+                <strong>Scan {shortId(runIdOf(selectedRun))} running</strong>
+                <span>
+                  {phaseLabel ?? 'Starting scan'} / {formatElapsed(elapsedSeconds)}
+                </span>
+                <small>{status}</small>
+                {selectedRunReview?.warnings.length ? <ValidationNotes review={selectedRunReview} compact /> : null}
+              </div>
+            </div>
+          ) : selectedRun ? (
             <div className="opencode-card">
               <div className="opencode-card-icon">
                 {selectedRun.status === 'failed' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
@@ -1313,18 +1373,8 @@ function formatDateTime(value?: string): string {
   return value ? new Date(value).toLocaleString() : 'unknown date';
 }
 
-function formatRunOption(run: ProjectRun, index: number, total: number): string {
-  const startedAt = run.startedAt ?? run.started_at;
-  const version = Math.max(1, total - index);
-  const label = index === 0 ? `v${version} latest` : `v${version}`;
-  const date = startedAt ? new Date(startedAt).toLocaleString() : 'unknown date';
-  const status = formatRunOutcome(run.status);
-  const session = sessionIdOf(run);
-  const usage = formatRunUsage(run);
-  const parts = [`${label} - ${date} - ${status}`];
-  if (usage) parts.push(usage);
-  if (session) parts.push(`OC ${shortId(session)}`);
-  return parts.join(' - ');
+function formatRunOption(run: ProjectRun, runs: ProjectRun[]): string {
+  return formatRunOptionLabel(run, runs);
 }
 
 function formatRepositoryMode(mode?: string) {
@@ -1458,16 +1508,22 @@ function shortCommit(commit?: string | null) {
 }
 
 function SessionMessage({ message }: { message: OpenCodeMessage }) {
-  if (message.type === 'assistant') {
+  const role = message.info?.role ?? message.type;
+  const providerError = message.info?.error?.data;
+  if (role === 'assistant') {
     const text =
       message.parts
         ?.filter((p) => p.type === 'text')
         .map((p) => p.text)
         .join('') ?? '';
+    const errorMessage =
+      providerError?.statusCode === 429 && /no credits|quota|credit balance/i.test(providerError.message ?? '')
+        ? 'OpenAI API credits are exhausted. Add credits or configure a provider account with available quota.'
+        : providerError?.message;
     return (
       <div className="event-row session-message session-message--assistant">
         <strong>assistant</strong>
-        <p style={{ whiteSpace: 'pre-wrap' }}>{text}</p>
+        <p style={{ whiteSpace: 'pre-wrap' }}>{errorMessage ?? text}</p>
       </div>
     );
   }
@@ -1481,7 +1537,7 @@ function SessionMessage({ message }: { message: OpenCodeMessage }) {
       </div>
     );
   }
-  if (message.type === 'user') {
+  if (role === 'user') {
     const text =
       message.parts
         ?.filter((p) => p.type === 'text')

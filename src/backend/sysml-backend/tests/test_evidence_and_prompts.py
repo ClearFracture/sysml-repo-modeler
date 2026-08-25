@@ -107,3 +107,24 @@ package Demo {
     assert result.status == "needs_attention"
     assert any("runtime scope" in warning for warning in result.warnings)
     assert any("source path" in warning for warning in result.warnings)
+
+
+def test_validation_reports_provider_error_before_missing_sysml():
+    provider_error = {
+        "code": "credit_balance_exhausted",
+        "statusCode": 429,
+        "provider": "openai",
+        "message": "OpenAI API credits are exhausted.",
+    }
+
+    result = validate_sysml_model(
+        None,
+        repository_count=1,
+        tool_errors=[],
+        provider_error=provider_error,
+    )
+
+    assert result.status == "failed"
+    assert result.summary == "OpenAI API credits are exhausted."
+    assert result.error == provider_error
+    assert "cloned successfully" in result.warnings[0]
