@@ -417,10 +417,10 @@ export default function ProjectOnboarding({
       .catch(() => {});
     return () => {
       eventSourceRef.current?.close();
-      // The stream cannot survive unmount; drop the synthetic entry so a stale
-      // "running" scan is not left in the dropdown.
+      // App keeps the synthetic run visible across view changes. A remount
+      // reconnects to an inflight run, while App polling replaces a completed
+      // run with the persisted record.
       activeRunIdRef.current = '';
-      onActiveRunChange(undefined);
     };
   }, [backendBaseUrl, connectToRun, onActiveRunChange, refreshProjects, refreshRuntimeStatus]);
 
@@ -1517,8 +1517,7 @@ function SessionMessage({ message }: { message: OpenCodeMessage }) {
         .map((p) => p.text)
         .join('') ?? '';
     const errorMessage =
-      providerError?.statusCode === 429 &&
-      /no credits|quota|credit balance/i.test(providerError.message ?? '')
+      providerError?.statusCode === 429 && /no credits|quota|credit balance/i.test(providerError.message ?? '')
         ? 'OpenAI API credits are exhausted. Add credits or configure a provider account with available quota.'
         : providerError?.message;
     return (

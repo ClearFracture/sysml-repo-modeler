@@ -187,7 +187,9 @@ class OpenCodeClient:
                         provider_error["message"],
                     )
                     if on_oc_event:
-                        on_oc_event("opencode_provider_error", provider_error["message"])
+                        on_oc_event(
+                            "opencode_provider_error", provider_error["message"]
+                        )
                 else:
                     logger.warning(
                         "[opencode] pass 1 produced no SysML; nothing to enrich"
@@ -216,6 +218,17 @@ class OpenCodeClient:
                     "[opencode] pass 2 documented model: %d chars", len(enriched)
                 )
                 return OpenCodeAnalysisResult(session_id, enriched, tool_errors)
+            provider_error = _extract_provider_error(enrich_response)
+            if provider_error:
+                logger.warning(
+                    "[opencode] pass 2 failed: %s",
+                    provider_error["message"],
+                )
+                if on_oc_event:
+                    on_oc_event("opencode_provider_error", provider_error["message"])
+                return OpenCodeAnalysisResult(
+                    session_id, system_map, tool_errors, provider_error
+                )
             logger.warning(
                 "[opencode] pass 2 produced no SysML; falling back to pass 1 model"
             )

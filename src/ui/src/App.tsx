@@ -34,7 +34,14 @@ import SysmlPartNode from './SysmlPartNode';
 import { buildExcerptElements, buildTopLevelElements, type BuildContext } from './graph';
 import { layoutElements } from './layout';
 import { getStackedPortGroups } from './portPlacement';
-import { formatRunOptionLabel, formatRunOutcome, isActiveRunStatus, mergeActiveProjectRun, validationReviewFromEvents, type ValidationReview } from './runValidation';
+import {
+  formatRunOptionLabel,
+  formatRunOutcome,
+  isActiveRunStatus,
+  mergeActiveProjectRun,
+  validationReviewFromEvents,
+  type ValidationReview,
+} from './runValidation';
 import { parseSysml } from './sysmlParser';
 import type {
   DiagramEdgeData,
@@ -471,10 +478,7 @@ export default function App() {
     }
   }, []);
 
-  const displayProjectRuns = useMemo(
-    () => mergeActiveProjectRun(projectRuns, activeRun),
-    [activeRun, projectRuns],
-  );
+  const displayProjectRuns = useMemo(() => mergeActiveProjectRun(projectRuns, activeRun), [activeRun, projectRuns]);
 
   const refreshProjects = useCallback(async () => {
     const [projectsResponse, runsResponse] = await Promise.all([
@@ -500,23 +504,26 @@ export default function App() {
     }
   }, []);
 
-  const refreshProjectRuns = useCallback(async (slug: string) => {
-    if (!slug) {
-      setProjectRuns([]);
-      setSelectedRunId('');
-      return;
-    }
-    const response = await fetch(`${backendBaseUrl}/api/projects/${slug}/runs`);
-    if (!response.ok) {
-      throw new Error(`Backend returned ${response.status} for /api/projects/${slug}/runs`);
-    }
-    const payload = (await response.json()) as { runs?: ProjectRun[] };
-    const runs = payload.runs ?? [];
-    setProjectRuns(runs);
-    setSelectedRunId((current) =>
-      current && runs.some((run) => runIdOf(run) === current) ? current : runIdOf(runs[0]) || '',
-    );
-  }, []);
+  const refreshProjectRuns = useCallback(
+    async (slug: string) => {
+      if (!slug) {
+        setProjectRuns([]);
+        setSelectedRunId('');
+        return;
+      }
+      const response = await fetch(`${backendBaseUrl}/api/projects/${slug}/runs`);
+      if (!response.ok) {
+        throw new Error(`Backend returned ${response.status} for /api/projects/${slug}/runs`);
+      }
+      const payload = (await response.json()) as { runs?: ProjectRun[] };
+      const runs = payload.runs ?? [];
+      applyProjectRuns(runs);
+      setSelectedRunId((current) =>
+        current && runs.some((run) => runIdOf(run) === current) ? current : runIdOf(runs[0]) || '',
+      );
+    },
+    [applyProjectRuns],
+  );
 
   const enterExcerpt = useCallback(
     (instance: string) => {
@@ -652,7 +659,7 @@ export default function App() {
         if (!res.ok) return;
         const payload = (await res.json()) as { runs?: ProjectRun[] };
         const runs = payload.runs ?? [];
-        setProjectRuns(runs);
+        applyProjectRuns(runs);
         const latest = pickLatestRun(runs);
         if (!latest) return;
         const latestId = latest.runId ?? latest.run_id;
@@ -666,7 +673,7 @@ export default function App() {
     };
     const id = setInterval(poll, 30_000);
     return () => clearInterval(id);
-  }, [loadRunSnapshot, selectedProjectSlug]);
+  }, [applyProjectRuns, loadRunSnapshot, selectedProjectSlug]);
 
   const resetLayout = useCallback(() => {
     setPortPlacementOverrides({});

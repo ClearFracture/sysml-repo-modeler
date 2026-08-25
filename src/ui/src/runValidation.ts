@@ -57,10 +57,7 @@ export function runIdOfRun(run?: ProjectRunLike): string {
   return run?.runId ?? run?.run_id ?? '';
 }
 
-export function mergeActiveProjectRun<T extends ProjectRunLike>(
-  runs: T[],
-  activeRun: T | undefined,
-): T[] {
+export function mergeActiveProjectRun<T extends ProjectRunLike>(runs: T[], activeRun: T | undefined): T[] {
   if (!activeRun) {
     return runs;
   }

@@ -8,6 +8,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sysml_backend.services.opencode_client import (  # noqa: E402
+    OpenCodeClient,
+    OpenCodeConfig,
     _extract_provider_error,
     _extract_sysml_content,
 )
@@ -94,7 +96,52 @@ def test_extract_sysml_none_when_no_model():
 
 
 def test_extract_provider_credit_error_without_exposing_response_headers():
-    response = {
+    response = _provider_credit_error()
+
+    error = _extract_provider_error(response)
+
+    assert error == {
+        "code": "credit_balance_exhausted",
+        "statusCode": 429,
+        "provider": "openai",
+        "message": (
+            "OpenAI API credits are exhausted. Add credits or configure a "
+            "provider account with available quota."
+        ),
+    }
+
+
+def test_run_analysis_reports_provider_error_during_enrichment(monkeypatch):
+    client = OpenCodeClient(OpenCodeConfig(base_url="http://opencode.test"))
+    architecture = _assistant("package P { part def A { } }")
+    responses = iter([architecture, _provider_credit_error()])
+    emitted_events: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(client, "_create_session", lambda run_id: {"id": "session-1"})
+    monkeypatch.setattr(
+        client,
+        "_send_prompt_streaming",
+        lambda *args, **kwargs: next(responses),
+    )
+    monkeypatch.setattr(client, "_post_completion_marker", lambda session_id: None)
+
+    result = client.run_analysis(
+        "run-1",
+        {"repositories": []},
+        on_oc_event=lambda phase, message: emitted_events.append((phase, message)),
+    )
+
+    assert result.sysml_content == "package P { part def A { } }"
+    assert result.provider_error is not None
+    assert result.provider_error["code"] == "credit_balance_exhausted"
+    assert (
+        "opencode_provider_error",
+        result.provider_error["message"],
+    ) in emitted_events
+
+
+def _provider_credit_error() -> dict:
+    return {
         "info": {
             "role": "assistant",
             "providerID": "openai",
@@ -112,16 +159,4 @@ def test_extract_provider_credit_error_without_exposing_response_headers():
             },
         },
         "parts": [],
-    }
-
-    error = _extract_provider_error(response)
-
-    assert error == {
-        "code": "credit_balance_exhausted",
-        "statusCode": 429,
-        "provider": "openai",
-        "message": (
-            "OpenAI API credits are exhausted. Add credits or configure a "
-            "provider account with available quota."
-        ),
     }

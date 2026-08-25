@@ -401,13 +401,25 @@ class MonitoringService:
                 evidence=evidence,
             )
             artifact_sets.append(synthesis_artifact)
+            synthesis_level = "warn" if provider_error else "info"
+            synthesis_message = (
+                (
+                    "OpenCode SysMLv2 enrichment stopped after a provider error; "
+                    f"retained the partial pass 1 model ({len(sysml_content)} chars)."
+                )
+                if provider_error
+                else f"OpenCode SysMLv2 synthesis complete ({len(sysml_content)} chars)."
+            )
             self.event_store.append(
                 slug,
                 run_id,
                 "opencode",
-                "info",
-                f"OpenCode SysMLv2 synthesis complete ({len(sysml_content)} chars).",
+                synthesis_level,
+                synthesis_message,
                 entity=package_name,
+                reasoning_summary=(
+                    json.dumps({"error": provider_error}) if provider_error else None
+                ),
                 evidence_refs=[
                     synthesis_artifact.suite_model_path,
                     synthesis_artifact.suite_evidence_path,
