@@ -9,7 +9,7 @@ The importer keeps its own local state: which scans exist, which have been pushe
 1. Connects to the modeler's telemetry API (`/api/telemetry/runs`)
 2. Tracks exported scans in a local SQLite database
 3. Downloads bundle archives on push
-4. Creates Langfuse **sessions per SysML project**, **traces per scan run**, and **chronologically interleaved** observations with **historical timestamps** from the bundle:
+4. Creates Langfuse **sessions per scan** (`sysml-project:{projectName}:{scanVersion}`), **traces per run** (deterministic id from `runId`), and **chronologically interleaved** observations with **historical timestamps** from the bundle:
    - **Pipeline spans** from `events.jsonl` (cycle start, validation, repair, OpenCode pass markers, tool/provider errors)
    - **OpenCode prompts, assistant turns, tool calls, reasoning, and model generations** sorted by their recorded times (not grouped after all pipeline steps)
    - **Per-step pricing** from OpenCode `step-finish` parts (`usage_details` + `cost_details`)
@@ -22,8 +22,8 @@ The importer keeps its own local state: which scans exist, which have been pushe
 ### Langfuse hierarchy
 
 ```
-Session  sysml-project:{projectSlug}
-└── Trace  scan/{runId prefix}   (deterministic trace id seeded from runId)
+Session  sysml-project:{projectName}:{scanVersion}
+└── Trace  scan/{runId prefix}   (deterministic trace id seeded from runId; runId in metadata as sysmlRunId)
     └── span  scan-{runId prefix}   ← manifest startedAt → completedAt
         ├── span  step-{phase}              ← pipeline events (events.jsonl timestamps)
         ├── generation  prompt-turn-N       ← user prompt (message.time)
@@ -105,8 +105,8 @@ Click **Save Configuration**. Keys are stored locally in `data/config.json` (git
 ## Import workflow
 
 1. In SysML Repo Modeler, run a scan with **Export telemetry bundle** enabled.
-2. In the importer, click **Refresh Scans**.
-3. Review the **Tracked Scans** table.
+2. In the importer, click **Refresh Scans** (or reload the page — both sync from the modeler telemetry API).
+3. Review the **Tracked Scans** table. Scans no longer available from the modeler (for example after a container rebuild without telemetry volumes) are removed from the local list.
 4. Push individually, or click **Push Pending** for all scans that need import.
 
 ### Push states
@@ -124,7 +124,7 @@ Each scan's **Scan Version** matches the modeler's telemetry bundle export time 
 
 1. Open your Langfuse UI (e.g. `http://localhost:3000`)
 2. Go to **Tracing → Sessions**
-3. Find a session named `sysml-project:{your-project-slug}`
+3. Find a session named `sysml-project:{projectName}:{scanVersion}` (run id is in trace metadata as `sysmlRunId`)
 4. Open a trace for a scan run (`scan/{runId prefix}`)
 5. Expand **scan-pipeline** for modeler processing steps and **opencode** for LLM/tool/model-call observations
 6. Check **scan-cost-summary** and per-step **model-step-N** generations for token and cost details

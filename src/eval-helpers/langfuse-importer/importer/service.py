@@ -60,12 +60,16 @@ class ImporterService:
             runs = client.list_telemetry_runs()
         except ModelerClientError as error:
             raise RuntimeError(f"Failed to refresh scans from modeler: {error}") from error
-        updated = self.state_store.upsert_from_modeler(runs)
+        updated, removed_run_ids = self.state_store.sync_from_modeler(runs)
+        if removed_run_ids:
+            self._remove_cached_bundles(removed_run_ids)
         scans = self.state_store.list_scans()
         return {
             "refreshedAt": scans[0].last_refreshed_at if scans else None,
             "runCount": len(scans),
             "updated": updated,
+            "removed": len(removed_run_ids),
+            "removedRunIds": removed_run_ids,
             "runs": [scan.to_json() for scan in scans],
             "summary": {
                 "total": len(scans),
@@ -149,3 +153,9 @@ class ImporterService:
             )
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def _remove_cached_bundles(self, run_ids: list[str]) -> None:
+        for run_id in run_ids:
+            cached = self.cache_dir / run_id
+            if cached.is_dir():
+                shutil.rmtree(cached, ignore_errors=True)

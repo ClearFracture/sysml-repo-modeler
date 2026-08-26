@@ -11,7 +11,7 @@ from importer.config_store import ImporterConfig
 from importer.langfuse_import import (
     LangfuseImportError,
     map_token_usage,
-    project_session_id_for_manifest,
+    scan_session_id_for_manifest,
     import_bundle,
 )
 from importer.timed_observation import emit_timed_item
@@ -75,12 +75,30 @@ def _write_bundle(
     )
 
 
-def test_project_session_id_for_manifest():
+def test_scan_session_id_for_manifest():
+    run_id = "abc123def4567890abc123def4567890"
+    scan_version = "2026-08-25T00:00:00+00:00"
     assert (
-        project_session_id_for_manifest({"projectSlug": "demo", "runId": "abc"})
-        == "sysml-project:demo"
+        scan_session_id_for_manifest(
+            {"projectName": "Demo Project", "runId": run_id},
+            scan_version=scan_version,
+        )
+        == "sysml-project:Demo Project:2026-08-25T00:00:00+00:00"
     )
-    assert project_session_id_for_manifest({"runId": "abc"}) == "sysml-run:abc"
+    assert (
+        scan_session_id_for_manifest(
+            {"projectName": "Demo:Project", "runId": run_id},
+            scan_version=scan_version,
+        )
+        == "sysml-project:Demo-Project:2026-08-25T00:00:00+00:00"
+    )
+    assert (
+        scan_session_id_for_manifest(
+            {"projectSlug": "demo", "runId": run_id},
+            scan_version=scan_version,
+        )
+        == "sysml-project:demo:2026-08-25T00:00:00+00:00"
+    )
 
 
 def test_map_token_usage_includes_cost_and_cache():
@@ -124,7 +142,7 @@ def test_import_bundle_requires_keys(tmp_path: Path):
 
 
 @patch("importer.langfuse_import.Langfuse")
-def test_import_bundle_creates_project_session_and_trace(mock_langfuse_cls, tmp_path: Path):
+def test_import_bundle_creates_scan_session_and_trace(mock_langfuse_cls, tmp_path: Path):
     mock_langfuse = MagicMock()
     mock_langfuse.create_trace_id.return_value = "trace-123"
     mock_span = MagicMock()
@@ -195,7 +213,8 @@ def test_import_bundle_creates_project_session_and_trace(mock_langfuse_cls, tmp_
     )
     result = import_bundle(bundle_dir, config=config, scan_version="2026-08-25T00:00:00+00:00")
 
-    assert result["langfuseSessionId"] == "sysml-project:demo"
+    assert result["langfuseSessionId"] == "sysml-project:Demo Project:2026-08-25T00:00:00+00:00"
+    assert result["runId"] == "abc123def4567890abc123def4567890"
     assert result["langfuseTraceId"] == "trace-123"
     assert result["timelineCount"] >= 2
     mock_langfuse.create_trace_id.assert_called_once_with(

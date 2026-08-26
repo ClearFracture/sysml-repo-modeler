@@ -76,9 +76,32 @@ export default function App() {
   }, []);
 
   const loadScans = useCallback(async () => {
-    const payload = await readJson<{ runs: ScanRecord[]; summary: ScanSummary }>('/api/scans');
-    setRuns(payload.runs);
-    setSummary(payload.summary);
+    setStatus('Refreshing scans from SysML Repo Modeler');
+    try {
+      const payload = await readJson<{
+        runs: ScanRecord[];
+        summary: ScanSummary;
+        updated: number;
+        removed?: number;
+      }>('/api/scans/refresh', { method: 'POST' });
+      setRuns(payload.runs);
+      setSummary(payload.summary);
+      const removed = payload.removed ?? 0;
+      setStatus(
+        removed > 0
+          ? `Synced ${payload.updated} scan(s); removed ${removed} unavailable from modeler`
+          : `Synced ${payload.updated} scan(s) from modeler`,
+      );
+    } catch (error) {
+      const payload = await readJson<{ runs: ScanRecord[]; summary: ScanSummary }>('/api/scans');
+      setRuns(payload.runs);
+      setSummary(payload.summary);
+      setStatus(
+        error instanceof Error
+          ? `${error.message}; showing last tracked scans`
+          : 'Modeler refresh failed; showing last tracked scans',
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -117,14 +140,8 @@ export default function App() {
 
   const refreshScans = async () => {
     setBusy(true);
-    setStatus('Refreshing scans from SysML Repo Modeler');
     try {
-      const payload = await readJson<{ runs: ScanRecord[]; updated: number }>('/api/scans/refresh', {
-        method: 'POST',
-      });
-      setRuns(payload.runs);
       await loadScans();
-      setStatus(`Refreshed ${payload.updated} scan(s) from modeler`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Refresh failed');
     } finally {
@@ -285,13 +302,14 @@ export default function App() {
                     <td className="project-cell">
                       <strong>{run.projectName?.trim() || 'Unknown project'}</strong>
                       <small>{run.projectSlug?.trim() || 'No project slug'}</small>
-                      <small className="project-session">
-                        Langfuse session: {sysmlProjectSessionId(run)}
-                      </small>
                     </td>
                     <td>
                       <strong>{shortId(run.runId)}</strong>
                       <small>{formatDate(run.completedAt ?? run.startedAt)}</small>
+                      <small className="scan-session">
+                        Langfuse session: {scanSessionId(run)}
+                      </small>
+                      <small className="scan-run-id">Run ID: {run.runId}</small>
                     </td>
                     <td>{run.scanStatus ?? '—'}</td>
                     <td>{run.telemetryExportStatus ?? '—'}</td>
@@ -356,15 +374,19 @@ function formatSysmlProject(run: ScanRecord): string {
   return name || slug || 'Unknown project';
 }
 
-function sysmlProjectSessionId(run: ScanRecord): string {
-  const slug = run.projectSlug?.trim();
-  if (slug) {
-    return `sysml-project:${slug}`;
+function scanSessionId(run: ScanRecord): string {
+  if (run.langfuseSessionId?.trim()) {
+    return run.langfuseSessionId.trim();
   }
-  if (run.runId?.trim()) {
-    return `sysml-run:${run.runId.trim()}`;
-  }
-  return '—';
+  const projectName = sanitizeProjectNameForSession(
+    run.projectName?.trim() || run.projectSlug?.trim() || 'unknown',
+  );
+  const scanVersion = run.scanVersion?.trim() || run.exportedAt?.trim() || 'unknown';
+  return `sysml-project:${projectName}:${scanVersion}`;
+}
+
+function sanitizeProjectNameForSession(projectName: string): string {
+  return projectName.replace(/:/g, '-');
 }
 
 function formatScanVersion(value?: string | null): string {

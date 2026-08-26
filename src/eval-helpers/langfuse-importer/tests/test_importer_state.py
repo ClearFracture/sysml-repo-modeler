@@ -90,3 +90,55 @@ def test_import_state_tracks_push_and_stale(tmp_path: Path):
     assert record is not None
     assert record.push_status == "stale"
     assert record.needs_push() is True
+
+
+def test_sync_from_modeler_removes_unavailable_scans(tmp_path: Path):
+    store = ImportStateStore(tmp_path / "imports.db")
+    manifest = {
+        "schemaVersion": "1",
+        "exportedAt": "2026-08-25T00:00:00+00:00",
+        "status": "completed",
+        "files": ["manifest.json"],
+    }
+    store.sync_from_modeler(
+        [
+            {
+                "runId": "keep-me",
+                "projectSlug": "demo",
+                "projectName": "Demo",
+                "status": "completed",
+                "telemetryExportStatus": "completed",
+                "manifest": manifest,
+            },
+            {
+                "runId": "also-keep",
+                "projectSlug": "demo",
+                "projectName": "Demo",
+                "status": "completed",
+                "telemetryExportStatus": "completed",
+                "manifest": manifest,
+            },
+        ]
+    )
+    assert {scan.run_id for scan in store.list_scans()} == {"keep-me", "also-keep"}
+
+    updated, removed = store.sync_from_modeler(
+        [
+            {
+                "runId": "keep-me",
+                "projectSlug": "demo",
+                "projectName": "Demo",
+                "status": "completed",
+                "telemetryExportStatus": "completed",
+                "manifest": manifest,
+            }
+        ]
+    )
+    assert updated == 1
+    assert removed == ["also-keep"]
+    assert {scan.run_id for scan in store.list_scans()} == {"keep-me"}
+
+    updated, removed = store.sync_from_modeler([])
+    assert updated == 0
+    assert removed == ["keep-me"]
+    assert store.list_scans() == []

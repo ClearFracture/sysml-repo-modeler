@@ -119,8 +119,10 @@ class ImportStateStore:
                 f"alter table {table} add column {column} {definition}"
             )
 
-    def upsert_from_modeler(self, runs: list[dict[str, Any]]) -> int:
+    def sync_from_modeler(self, runs: list[dict[str, Any]]) -> tuple[int, list[str]]:
+        """Upsert modeler runs and drop local scans no longer exported by the modeler."""
         refreshed_at = _now()
+        seen_run_ids: list[str] = []
         updated = 0
         with self._lock:
             with self._connect() as connection:
@@ -128,6 +130,7 @@ class ImportStateStore:
                     run_id = str(run.get("runId") or run.get("run_id") or "").strip()
                     if not run_id:
                         continue
+                    seen_run_ids.append(run_id)
                     manifest = run.get("manifest")
                     manifest = manifest if isinstance(manifest, dict) else {}
                     fingerprint = _fingerprint(manifest)
@@ -197,7 +200,35 @@ class ImportStateStore:
                         ),
                     )
                     updated += 1
+
+                removed_run_ids: list[str] = []
+                if seen_run_ids:
+                    placeholders = ",".join("?" * len(seen_run_ids))
+                    stale_rows = connection.execute(
+                        f"""
+                        select run_id from scans
+                        where run_id not in ({placeholders})
+                        """,
+                        seen_run_ids,
+                    ).fetchall()
+                    removed_run_ids = [str(row["run_id"]) for row in stale_rows]
+                    if removed_run_ids:
+                        delete_placeholders = ",".join("?" * len(removed_run_ids))
+                        connection.execute(
+                            f"delete from scans where run_id in ({delete_placeholders})",
+                            removed_run_ids,
+                        )
+                else:
+                    stale_rows = connection.execute("select run_id from scans").fetchall()
+                    removed_run_ids = [str(row["run_id"]) for row in stale_rows]
+                    if removed_run_ids:
+                        connection.execute("delete from scans")
+
                 connection.commit()
+        return updated, removed_run_ids
+
+    def upsert_from_modeler(self, runs: list[dict[str, Any]]) -> int:
+        updated, _removed = self.sync_from_modeler(runs)
         return updated
 
     def list_scans(self) -> list[ScanRecord]:

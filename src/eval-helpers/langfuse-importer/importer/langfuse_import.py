@@ -13,7 +13,7 @@ from .timeline import TimelineItem, build_timeline, parse_timestamp
 from .timed_observation import emit_timeline, emit_timed_root
 
 IMPORTER_NAME = "sysml-repo-modeler-langfuse-importer"
-IMPORTER_VERSION = "0.4.0"
+IMPORTER_VERSION = "0.6.0"
 
 
 class LangfuseImportError(Exception):
@@ -46,8 +46,11 @@ def import_bundle(
     default_model = str(model.get("modelId") or "unknown")
     default_provider = str(model.get("providerId") or "")
 
-    project_session_id = project_session_id_for_manifest(manifest)
     resolved_scan_version = scan_version or scan_version_from_manifest(manifest)
+    scan_session_id = scan_session_id_for_manifest(
+        manifest,
+        scan_version=resolved_scan_version,
+    )
     metadata = _build_metadata(manifest, config, resolved_scan_version)
     tags = _build_tags(manifest, config, resolved_scan_version)
     messages = coerce_messages(session)
@@ -61,7 +64,7 @@ def import_bundle(
 
     try:
         with propagate_attributes(
-            session_id=project_session_id,
+            session_id=scan_session_id,
             trace_name=f"scan/{run_id[:8]}",
             metadata=metadata,
             tags=tags,
@@ -122,7 +125,7 @@ def import_bundle(
                 name=str(score_name),
                 value=value,
                 comment=score.get("comment"),
-                session_id=project_session_id,
+                session_id=scan_session_id,
                 trace_id=trace_id,
                 metadata={
                     "scanVersion": resolved_scan_version,
@@ -137,7 +140,7 @@ def import_bundle(
 
     return {
         "runId": run_id,
-        "langfuseSessionId": project_session_id,
+        "langfuseSessionId": scan_session_id,
         "langfuseTraceId": trace_id,
         "scanVersion": resolved_scan_version,
         "tags": tags,
@@ -146,14 +149,28 @@ def import_bundle(
     }
 
 
-def project_session_id_for_manifest(manifest: dict[str, Any]) -> str:
-    project_slug = manifest.get("projectSlug")
-    if isinstance(project_slug, str) and project_slug.strip():
-        return f"sysml-project:{project_slug.strip()}"
-    run_id = manifest.get("runId")
-    if isinstance(run_id, str) and run_id.strip():
-        return f"sysml-run:{run_id.strip()}"
-    return "sysml-unknown"
+def scan_session_id_for_manifest(
+    manifest: dict[str, Any],
+    *,
+    scan_version: str | None = None,
+) -> str:
+    project_name = manifest.get("projectName") or manifest.get("projectSlug") or "unknown"
+    if not isinstance(project_name, str) or not project_name.strip():
+        project_name = "unknown"
+    else:
+        project_name = _sanitize_project_name_for_session(project_name.strip())
+
+    version = scan_version or scan_version_from_manifest(manifest)
+    if not isinstance(version, str) or not version.strip():
+        version = "unknown"
+    else:
+        version = version.strip()
+
+    return f"sysml-project:{project_name}:{version}"
+
+
+def _sanitize_project_name_for_session(project_name: str) -> str:
+    return project_name.replace(":", "-")
 
 
 def map_token_usage(

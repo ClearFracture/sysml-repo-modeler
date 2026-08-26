@@ -183,7 +183,9 @@ td small {
   color: #1f4d57;
 }
 
-.project-session {
+.project-session,
+.scan-session,
+.scan-run-id {
   font-family: Consolas, "Courier New", monospace;
   font-size: 11px;
 }
