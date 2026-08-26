@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import shutil
 import tarfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ from .sysml_validation import SysmlValidationResult
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "1"
+SESSION_SCHEMA_VERSION = "2"
 ARTIFACT_FILES = (
     ("suite_model.sysml", "suite_model_path"),
     ("suite_evidence.json", "suite_evidence_path"),
@@ -95,6 +97,7 @@ class ScanTelemetryExporter:
                 bundle_dir / "opencode" / "session.json",
                 opencode_session_id,
                 self.opencode_client,
+                opencode_usage=opencode_usage,
             )
             _write_artifacts(bundle_dir / "artifacts", artifacts)
             manifest = _build_manifest(
@@ -162,10 +165,15 @@ class ScanTelemetryStore:
             )
             if not export_path and not export_status:
                 continue
-            manifest = self.read_manifest(str(run.get("runId") or run.get("run_id")))
+            run_id = str(run.get("runId") or run.get("run_id") or "").strip()
+            if not run_id or not self.bundle_exists(run_id):
+                continue
+            manifest = self.read_manifest(run_id)
+            if manifest is None:
+                continue
             exported.append(
                 {
-                    "runId": run.get("runId") or run.get("run_id"),
+                    "runId": run_id,
                     "projectSlug": run.get("projectSlug") or run.get("project_slug"),
                     "projectName": run.get("projectName") or run.get("project_name"),
                     "status": run.get("status"),
@@ -182,6 +190,12 @@ class ScanTelemetryStore:
                 }
             )
         return exported
+
+    def bundle_exists(self, run_id: str) -> bool:
+        bundle_dir = self.bundle_dir(run_id)
+        if bundle_dir is None or not bundle_dir.is_dir():
+            return False
+        return (bundle_dir / "manifest.json").is_file()
 
     def bundle_dir(self, run_id: str) -> Path | None:
         if self.export_root is None or not _safe_run_id(run_id):
@@ -218,6 +232,29 @@ class ScanTelemetryStore:
                     continue
                 archive.add(path, arcname=str(path.relative_to(bundle_dir)))
         return buffer.getvalue()
+
+    def delete_runs(self, run_ids: list[str]) -> int:
+        """Remove exported telemetry bundle directories for the given run ids."""
+        if self.export_root is None:
+            return 0
+        deleted = 0
+        for run_id in run_ids:
+            if not _safe_run_id(run_id):
+                continue
+            bundle_dir = self.export_root / run_id
+            if not bundle_dir.is_dir():
+                continue
+            try:
+                shutil.rmtree(bundle_dir)
+                deleted += 1
+                logger.info("[telemetry] deleted scan bundle for run %s", run_id[:8])
+            except OSError as error:
+                logger.warning(
+                    "[telemetry] failed to delete scan bundle for run %s: %s",
+                    run_id[:8],
+                    error,
+                )
+        return deleted
 
 
 def _build_manifest(**fields: Any) -> dict[str, Any]:
@@ -274,16 +311,20 @@ def _write_opencode_session(
     path: Path,
     session_id: str | None,
     opencode_client: OpenCodeClient,
+    *,
+    opencode_usage: dict[str, Any] | None = None,
 ) -> None:
     messages: list[dict[str, Any]] = []
     if session_id:
-        messages = opencode_client.get_session_messages(session_id)
+        messages = opencode_client.get_session_transcript(session_id)
     _write_json(
         path,
         {
-            "schemaVersion": SCHEMA_VERSION,
+            "schemaVersion": SESSION_SCHEMA_VERSION,
             "sessionId": session_id,
             "messageCount": len(messages),
+            "usage": opencode_usage,
+            "messagesFormat": "opencode-v2-normalized",
             "messages": messages,
         },
     )

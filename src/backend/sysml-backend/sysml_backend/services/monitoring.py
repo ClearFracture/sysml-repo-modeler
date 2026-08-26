@@ -199,6 +199,18 @@ class MonitoringService:
             return None
         return self.telemetry_store.create_bundle_archive(run_id)
 
+    def delete_project_telemetry(self, project_slug: str) -> int:
+        """Delete filesystem telemetry bundles for all runs belonging to a project."""
+        if self.telemetry_store is None:
+            return 0
+        runs = self.analysis_store.list_runs(project_slug)
+        run_ids = [
+            str(run.get("runId") or run.get("run_id") or "").strip()
+            for run in runs
+        ]
+        run_ids = [run_id for run_id in run_ids if run_id]
+        return self.telemetry_store.delete_runs(run_ids)
+
     # ---- Internal helpers ---------------------------------------------------
 
     def _start_cycle(

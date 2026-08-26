@@ -516,6 +516,19 @@ def _register_routes(app: FastAPI, services: Services) -> None:
             return _error(400, "invalid_request", str(error))
         return Response(status_code=204)
 
+    @app.delete("/api/projects/{slug}")
+    def delete_project(slug: str) -> Any:
+        project = _require_project(slug)
+        if project is None:
+            return _error(404, "not_found", f"Project {slug} was not found.")
+        try:
+            deleted_slug = services.project_workspace.delete_project(slug)
+            services.monitoring_service.delete_project_telemetry(deleted_slug)
+            services.analysis_store.delete_project(deleted_slug)
+        except ValueError as error:
+            return _error(400, "invalid_request", str(error))
+        return Response(status_code=204)
+
     @app.get("/{full_path:path}")
     def spa(full_path: str) -> Any:
         static_root = services.config.static_assets_path

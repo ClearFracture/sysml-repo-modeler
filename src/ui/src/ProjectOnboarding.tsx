@@ -674,7 +674,7 @@ export default function ProjectOnboarding({
   const deleteProject = async () => {
     if (!selectedProjectSlug || !selectedProject) return;
     const confirmed = window.confirm(
-      `Delete ${selectedProject.name}? This removes the project, repositories, scans, and artifacts.`,
+      `Delete ${selectedProject.name}? This removes the project, repositories, scans, telemetry bundles, and artifacts.`,
     );
     if (!confirmed) return;
     setBusy(true);

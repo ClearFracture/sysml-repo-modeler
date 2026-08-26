@@ -673,6 +673,7 @@ class SysmlBackendHandler(BaseHTTPRequestHandler):
             return
         try:
             deleted_slug = self.server.project_workspace.delete_project(slug)
+            self.server.monitoring_service.delete_project_telemetry(deleted_slug)
             self.server.analysis_store.delete_project(deleted_slug)
         except ValueError as error:
             self.respond_json(

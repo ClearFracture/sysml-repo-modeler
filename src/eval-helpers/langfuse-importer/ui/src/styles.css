@@ -1,0 +1,201 @@
+:root {
+  color: #172326;
+  background: #eef3f4;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  line-height: 1.4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+}
+
+.hero,
+.panel {
+  background: #ffffff;
+  border: 1px solid #d6e0e2;
+  border-radius: 10px;
+  padding: 18px;
+  box-shadow: 0 10px 24px rgba(28, 53, 58, 0.06);
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.hero h1,
+.panel h2 {
+  margin: 0 0 8px;
+}
+
+.hero p,
+.empty-state {
+  margin: 0;
+  color: #52676c;
+}
+
+.hero-actions,
+.panel-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #cbd8da;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #25383d;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: #8fb0b7;
+  background: #f7fbfb;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+}
+
+label span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #52676c;
+  text-transform: uppercase;
+}
+
+input {
+  min-height: 36px;
+  border: 1px solid #cbd8da;
+  border-radius: 7px;
+  padding: 0 10px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.summary-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.summary-pills span,
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #eef3f4;
+  color: #25383d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.badge--ok {
+  background: #e7f5ec;
+  color: #2f7046;
+}
+
+.badge--pending {
+  background: #fff6e8;
+  color: #8a5a13;
+}
+
+.badge--error {
+  background: #fdeeee;
+  color: #9a3b3b;
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #e4ecee;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #66787d;
+}
+
+td strong {
+  display: block;
+}
+
+td small {
+  display: block;
+  color: #66787d;
+}
+
+.project-cell strong {
+  color: #1f4d57;
+}
+
+.project-session {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 11px;
+}
+
+@media (max-width: 820px) {
+  .hero,
+  .panel-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
