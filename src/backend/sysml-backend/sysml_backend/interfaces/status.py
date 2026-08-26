@@ -31,6 +31,9 @@ def runtime_status(services: Services) -> dict[str, object]:
             "scratch": str(config.scratch_path),
             "projects": str(config.projects_path),
             "opencodeWorkspaceRoot": config.opencode_workspace_root,
+            "telemetryExportRoot": str(config.telemetry_export_root)
+            if config.telemetry_export_root
+            else None,
         },
         "runs": {
             "inflight": services.monitoring_service.list_inflight_run_ids(),

@@ -84,8 +84,10 @@ services:
       OPENCODE_PROVIDER_ID: ${OPENCODE_PROVIDER_ID:-openai}
       OPENCODE_MODEL_ID: ${OPENCODE_MODEL_ID:-gpt-5.5}
       OPENCODE_AGENT: ${OPENCODE_AGENT:-}
+      TELEMETRY_EXPORT_ROOT: ${TELEMETRY_EXPORT_ROOT:-/workspace/telemetry/scans}
     volumes:
       - app-projects:/workspace/projects
+      - app-telemetry:/workspace/telemetry
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,3 +100,4 @@ services:
 volumes:
   postgres-data:
   app-projects:
+  app-telemetry:

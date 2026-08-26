@@ -91,6 +91,14 @@ export type ProjectRun = {
   total_tokens?: number | null;
   opencodeUsage?: Record<string, unknown>;
   opencode_usage?: Record<string, unknown>;
+  telemetryEnabled?: boolean;
+  telemetry_enabled?: boolean;
+  telemetryExportPath?: string | null;
+  telemetry_export_path?: string | null;
+  telemetryExportStatus?: string | null;
+  telemetry_export_status?: string | null;
+  telemetryExportedAt?: string | null;
+  telemetry_exported_at?: string | null;
 };
 
 type OpenCodeSession = {
@@ -207,6 +215,7 @@ export default function ProjectOnboarding({
   const [status, setStatus] = useState('Ready');
   const [githubToken, setGithubToken] = useState('');
   const [rememberGithubToken, setRememberGithubToken] = useState(false);
+  const [exportTelemetry, setExportTelemetry] = useState(false);
   const [editingProjectName, setEditingProjectName] = useState(false);
   const [projectNameDraft, setProjectNameDraft] = useState('');
   const [blockingNotice, setBlockingNotice] = useState<{ title: string; message: string } | null>(null);
@@ -791,7 +800,9 @@ export default function ProjectOnboarding({
     setBusy(true);
     setStatus('Starting scan');
     try {
-      const response = await postJson(`${backendBaseUrl}/api/projects/${selectedProjectSlug}/monitor`, {});
+      const response = await postJson(`${backendBaseUrl}/api/projects/${selectedProjectSlug}/monitor`, {
+        telemetryEnabled: exportTelemetry,
+      });
       const run = response.run as ProjectRun;
       const runId = run.runId ?? run.run_id;
       if (!runId) {
@@ -1009,14 +1020,28 @@ export default function ProjectOnboarding({
               <DownloadCloud size={16} />
               <span>Sync Repos</span>
             </button>
+          </div>
+
+          <div className="scan-options">
+            <label className="scan-options__toggle">
+              <input
+                checked={exportTelemetry}
+                disabled={busy || !selectedProjectSlug || workspaceUnavailable}
+                onChange={(event) => setExportTelemetry(event.target.checked)}
+                type="checkbox"
+              />
+              <span>Export telemetry bundle</span>
+            </label>
             <button
-              className="tool-button"
+              className="tool-button scan-options__scan"
               disabled={busy || !selectedProjectSlug || workspaceUnavailable}
               onClick={monitorProject}
               title={
                 workspaceUnavailable
                   ? 'This runtime cannot access the project workspace.'
-                  : 'Start scan for this project'
+                  : exportTelemetry
+                    ? 'Start scan and write a telemetry bundle for external eval tools'
+                    : 'Start scan for this project'
               }
               type="button"
             >
@@ -1220,6 +1245,7 @@ export default function ProjectOnboarding({
                   {formatDateTime(selectedRun.startedAt ?? selectedRun.started_at)}
                 </span>
                 {formatRunUsage(selectedRun) ? <small>{formatRunUsage(selectedRun)}</small> : null}
+                {formatRunTelemetry(selectedRun) ? <small>{formatRunTelemetry(selectedRun)}</small> : null}
                 {selectedRunReview?.warnings.length ? <ValidationNotes review={selectedRunReview} compact /> : null}
                 {sessionIdOf(selectedRun) ? (
                   <button
@@ -1481,6 +1507,22 @@ function formatRunUsage(run: ProjectRun): string {
     parts.push(formatCurrency(cost));
   }
   return parts.join(' / ');
+}
+
+function formatRunTelemetry(run: ProjectRun): string | null {
+  const enabled = run.telemetryEnabled ?? run.telemetry_enabled;
+  if (!enabled) {
+    return null;
+  }
+  const status = run.telemetryExportStatus ?? run.telemetry_export_status;
+  const path = run.telemetryExportPath ?? run.telemetry_export_path;
+  if (status === 'completed' && path) {
+    return `Telemetry bundle: ${path}`;
+  }
+  if (status) {
+    return `Telemetry export ${status}`;
+  }
+  return 'Telemetry export requested';
 }
 
 function formatCompactNumber(value: number): string {

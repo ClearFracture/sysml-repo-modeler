@@ -24,6 +24,7 @@ class BackendConfig:
     opencode_provider_id: str | None = None
     opencode_agent: str | None = None
     opencode_workspace_root: str = "packages"
+    telemetry_export_root: Path | None = None
 
 
 def load_config() -> BackendConfig:
@@ -63,7 +64,18 @@ def load_config() -> BackendConfig:
         # The path the OpenCode container sees as the project workspace root.
         opencode_workspace_root=os.environ.get("OPENCODE_WORKSPACE_ROOT")
         or "/workspace/projects",
+        telemetry_export_root=_telemetry_export_root(base),
     )
+
+
+def _telemetry_export_root(base: Path | None) -> Path | None:
+    override = os.environ.get("TELEMETRY_EXPORT_ROOT")
+    if override is not None:
+        trimmed = override.strip()
+        return Path(trimmed) if trimmed else None
+    if base is not None:
+        return base / "telemetry" / "scans"
+    return Path("telemetry") / "scans"
 
 
 def _static_assets_path(package_root: Path) -> Path:

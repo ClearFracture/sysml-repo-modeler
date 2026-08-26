@@ -16,6 +16,7 @@ from .repository_importer import (
     import_result_to_json,
 )
 from .run_events import RunEventStore
+from .telemetry_export import ScanTelemetryExporter, ScanTelemetryStore
 from .storage import (
     DocumentStore,
     PostgresDocumentStore,
@@ -58,6 +59,8 @@ __all__ = [
     "import_request_from_json",
     "import_result_to_json",
     "RunEventStore",
+    "ScanTelemetryExporter",
+    "ScanTelemetryStore",
     "analysis_prompt",
     "analysis_system_prompt",
     "analysis_user_prompt",
