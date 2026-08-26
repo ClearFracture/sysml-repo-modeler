@@ -92,13 +92,13 @@ Open **http://127.0.0.1:5174** (Vite proxies `/api` to the importer backend).
 
 In the UI **Langfuse Target** panel, set:
 
-| Field | Example | Purpose |
-|---|---|---|
-| SysML modeler URL | `http://localhost:8080` | Telemetry API base URL |
-| Langfuse host | `http://localhost:3000` | Self-hosted Langfuse URL |
-| Langfuse project name | `sysml-repo-modeler` | Stored in trace metadata/tags |
-| Langfuse public key | `pk-lf-...` | Langfuse project API key |
-| Langfuse secret key | `sk-lf-...` | Langfuse project API secret |
+| Field                 | Example                 | Purpose                       |
+| --------------------- | ----------------------- | ----------------------------- |
+| SysML modeler URL     | `http://localhost:8080` | Telemetry API base URL        |
+| Langfuse host         | `http://localhost:3000` | Self-hosted Langfuse URL      |
+| Langfuse project name | `sysml-repo-modeler`    | Stored in trace metadata/tags |
+| Langfuse public key   | `pk-lf-...`             | Langfuse project API key      |
+| Langfuse secret key   | `sk-lf-...`             | Langfuse project API secret   |
 
 Click **Save Configuration**. Keys are stored locally in `data/config.json` (gitignored).
 
@@ -111,12 +111,12 @@ Click **Save Configuration**. Keys are stored locally in `data/config.json` (git
 
 ### Push states
 
-| Status | Meaning |
-|---|---|
-| Pending | Export completed, never pushed |
-| Pushed | Latest bundle successfully imported |
-| Stale | Bundle changed since last push — push again to update Langfuse |
-| Failed | Last push attempt failed (see error text) |
+| Status  | Meaning                                                        |
+| ------- | -------------------------------------------------------------- |
+| Pending | Export completed, never pushed                                 |
+| Pushed  | Latest bundle successfully imported                            |
+| Stale   | Bundle changed since last push — push again to update Langfuse |
+| Failed  | Last push attempt failed (see error text)                      |
 
 Each scan's **Scan Version** matches the modeler's telemetry bundle export time (`manifest.exportedAt`). Re-exporting a scan creates a new version and marks the importer row **Stale** until you push again.
 
@@ -134,15 +134,15 @@ Ingestion can take 15–30 seconds to appear.
 
 ## API (optional automation)
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/health` | Health check |
-| `GET` | `/api/config` | Current config (secret not returned) |
-| `PUT` | `/api/config` | Save config |
-| `GET` | `/api/scans` | List tracked scans + summary |
-| `POST` | `/api/scans/refresh` | Refresh from modeler |
-| `POST` | `/api/scans/{run_id}/push` | Push one scan |
-| `POST` | `/api/scans/push-pending` | Push all pending/stale/failed scans |
+| Method | Path                       | Description                          |
+| ------ | -------------------------- | ------------------------------------ |
+| `GET`  | `/api/health`              | Health check                         |
+| `GET`  | `/api/config`              | Current config (secret not returned) |
+| `PUT`  | `/api/config`              | Save config                          |
+| `GET`  | `/api/scans`               | List tracked scans + summary         |
+| `POST` | `/api/scans/refresh`       | Refresh from modeler                 |
+| `POST` | `/api/scans/{run_id}/push` | Push one scan                        |
+| `POST` | `/api/scans/push-pending`  | Push all pending/stale/failed scans  |
 
 Example:
 
@@ -153,19 +153,19 @@ Invoke-RestMethod http://127.0.0.1:8790/api/scans/push-pending -Method POST
 
 ## Local data
 
-| Path | Contents |
-|---|---|
+| Path               | Contents                             |
+| ------------------ | ------------------------------------ |
 | `data/config.json` | Modeler/Langfuse connection settings |
-| `data/imports.db` | Scan tracking and push history |
-| `data/bundles/` | Reserved for future cache use |
+| `data/imports.db`  | Scan tracking and push history       |
+| `data/bundles/`    | Reserved for future cache use        |
 
 ## Environment variables
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `IMPORTER_LISTEN_HOST` | `127.0.0.1` | Bind address |
-| `IMPORTER_LISTEN_PORT` | `8790` | Bind port |
-| `IMPORTER_DATA_DIR` | `./data` | State directory |
+| Variable               | Default     | Purpose         |
+| ---------------------- | ----------- | --------------- |
+| `IMPORTER_LISTEN_HOST` | `127.0.0.1` | Bind address    |
+| `IMPORTER_LISTEN_PORT` | `8790`      | Bind port       |
+| `IMPORTER_DATA_DIR`    | `./data`    | State directory |
 
 ## Self-hosted Langfuse setup (summary)
 
@@ -189,10 +189,10 @@ Official guide: https://langfuse.com/self-hosting/deployment/docker-compose
 
 ## Troubleshooting
 
-| Issue | Check |
-|---|---|
-| Refresh fails | Modeler reachable? Any scans with telemetry export completed? Try `GET /api/telemetry/runs` on the modeler |
-| Push fails with auth error | Langfuse host and API keys; keys must belong to the configured Langfuse project |
-| No traces in Langfuse | Wait 30s; check Langfuse worker logs; confirm push status is **Pushed** |
-| Scan missing after refresh | Scan must have been run with **Export telemetry bundle** enabled |
+| Issue                                      | Check                                                                                                                                             |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Refresh fails                              | Modeler reachable? Any scans with telemetry export completed? Try `GET /api/telemetry/runs` on the modeler                                        |
+| Push fails with auth error                 | Langfuse host and API keys; keys must belong to the configured Langfuse project                                                                   |
+| No traces in Langfuse                      | Wait 30s; check Langfuse worker logs; confirm push status is **Pushed**                                                                           |
+| Scan missing after refresh                 | Scan must have been run with **Export telemetry bundle** enabled                                                                                  |
 | OpenCode tools/prompts missing in Langfuse | Re-run the scan to export a fresh bundle (OpenCode v2 messages use `info.role` and are normalized at export time). Then re-push from the importer |

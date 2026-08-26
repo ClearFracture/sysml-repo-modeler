@@ -28,7 +28,11 @@ from ..utils import BackendConfig, load_config
 from .serializers import package_registration_to_response, project_to_response
 from .server import Services, build_services
 from .status import project_workspace_status, runtime_status
-from .web_common import ALLOWED_ARTIFACTS, is_unsafe_segment, telemetry_enabled_from_payload
+from .web_common import (
+    ALLOWED_ARTIFACTS,
+    is_unsafe_segment,
+    telemetry_enabled_from_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -194,18 +198,14 @@ def _register_routes(app: FastAPI, services: Services) -> None:
         return Response(
             content=archive,
             media_type="application/gzip",
-            headers={
-                "Content-Disposition": f'attachment; filename="{run_id}.tar.gz"'
-            },
+            headers={"Content-Disposition": f'attachment; filename="{run_id}.tar.gz"'},
         )
 
     @app.get("/api/telemetry/runs/{run_id}/files/{relative_path:path}")
     def telemetry_file(run_id: str, relative_path: str) -> Any:
         if is_unsafe_segment(run_id):
             return _error(400, "invalid_request", "Invalid run identifier.")
-        payload = services.monitoring_service.read_telemetry_file(
-            run_id, relative_path
-        )
+        payload = services.monitoring_service.read_telemetry_file(run_id, relative_path)
         if payload is None:
             return _error(
                 404,

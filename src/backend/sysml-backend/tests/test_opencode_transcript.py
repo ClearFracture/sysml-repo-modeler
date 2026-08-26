@@ -13,16 +13,18 @@ from sysml_backend.services.opencode_transcript import (
 
 
 def test_message_role_reads_info_role():
-    assert (
-        message_role({"info": {"role": "assistant"}, "parts": []})
-        == "assistant"
-    )
+    assert message_role({"info": {"role": "assistant"}, "parts": []}) == "assistant"
 
 
 def test_normalize_opencode_message_preserves_tool_parts():
     normalized = normalize_opencode_message(
         {
-            "info": {"id": "m1", "role": "assistant", "providerID": "openai", "modelID": "gpt"},
+            "info": {
+                "id": "m1",
+                "role": "assistant",
+                "providerID": "openai",
+                "modelID": "gpt",
+            },
             "parts": [
                 {
                     "type": "tool",

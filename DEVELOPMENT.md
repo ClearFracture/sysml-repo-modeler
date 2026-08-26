@@ -157,7 +157,14 @@ python -m pip install -e ".[dev]"
 pre-commit install
 ```
 
-Run the backend test suite:
+Run the test suite:
+
+```powershell
+pytest
+```
+
+The `dev` extra includes dependencies for both the backend and the Langfuse
+importer helper tests. Backend-only:
 
 ```powershell
 pytest src\backend\sysml-backend\tests

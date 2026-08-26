@@ -14,6 +14,9 @@ from sysml_backend.services.telemetry_export import (
     ScanTelemetryStore,
 )
 
+TEST_RUN_ID = "testrun001"
+TEST_RUN_ID_B = "testrun002"
+
 
 class _StubOpenCodeClient(OpenCodeClient):
     def __init__(self) -> None:
@@ -21,10 +24,17 @@ class _StubOpenCodeClient(OpenCodeClient):
 
     def get_session_messages(self, session_id: str) -> list[dict]:
         del session_id
-        return [{"type": "assistant", "parts": [{"type": "text", "text": "package Demo {}"}]}]
+        return [
+            {
+                "type": "assistant",
+                "parts": [{"type": "text", "text": "package Demo {}"}],
+            }
+        ]
 
     def get_session_transcript(self, session_id: str) -> list[dict]:
-        from sysml_backend.services.opencode_transcript import normalize_opencode_message
+        from sysml_backend.services.opencode_transcript import (
+            normalize_opencode_message,
+        )
 
         return [
             normalized
@@ -69,7 +79,7 @@ def test_export_scan_writes_bundle(tmp_path):
         warnings=[],
     )
     result = exporter.export_scan(
-        run_id="abc123def4567890abc123def4567890",
+        run_id=TEST_RUN_ID,
         project_slug="demo",
         project_name="Demo",
         trigger="manual",
@@ -104,12 +114,12 @@ def test_export_scan_writes_bundle(tmp_path):
 
     manifest = json.loads((bundle_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["schemaVersion"] == "1"
-    assert manifest["runId"] == "abc123def4567890abc123def4567890"
+    assert manifest["runId"] == TEST_RUN_ID
     assert manifest["telemetryEnabled"] is True
 
 
 def test_telemetry_store_reads_bundle(tmp_path):
-    run_id = "abc123def4567890abc123def4567890"
+    run_id = TEST_RUN_ID
     bundle_dir = tmp_path / run_id
     bundle_dir.mkdir(parents=True)
     (bundle_dir / "manifest.json").write_text(
@@ -146,7 +156,7 @@ def test_telemetry_store_reads_bundle(tmp_path):
 
 
 def test_telemetry_store_omits_runs_without_bundle_on_disk(tmp_path):
-    run_id = "abc123def4567890abc123def4567890"
+    run_id = TEST_RUN_ID
     store = ScanTelemetryStore(tmp_path)
 
     listed = store.list_runs(
@@ -164,8 +174,8 @@ def test_telemetry_store_omits_runs_without_bundle_on_disk(tmp_path):
 
 def test_telemetry_store_deletes_run_bundles(tmp_path):
     run_ids = [
-        "abc123def4567890abc123def4567890",
-        "def456abc7890123def456abc7890123",
+        TEST_RUN_ID,
+        TEST_RUN_ID_B,
     ]
     for run_id in run_ids:
         bundle_dir = tmp_path / run_id

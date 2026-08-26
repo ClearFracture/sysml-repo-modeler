@@ -16,7 +16,6 @@ from .repository_importer import (
     import_result_to_json,
 )
 from .run_events import RunEventStore
-from .telemetry_export import ScanTelemetryExporter, ScanTelemetryStore
 from .storage import (
     DocumentStore,
     PostgresDocumentStore,
@@ -32,6 +31,7 @@ from .sysml_prompts import (
     repair_prompt,
     repo_lines,
 )
+from .telemetry_export import ScanTelemetryExporter, ScanTelemetryStore
 from .workspace import (
     PackageWorkspace,
     WorkspaceManager,

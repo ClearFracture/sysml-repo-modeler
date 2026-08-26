@@ -13,7 +13,11 @@ def normalize_opencode_message(message: dict[str, Any]) -> dict[str, Any] | None
         return None
 
     parts = message.get("parts")
-    parts = [part for part in parts if isinstance(part, dict)] if isinstance(parts, list) else []
+    parts = (
+        [part for part in parts if isinstance(part, dict)]
+        if isinstance(parts, list)
+        else []
+    )
 
     model = info.get("model")
     model = model if isinstance(model, dict) else {}
@@ -103,9 +107,7 @@ def step_finish_payload(part: dict[str, Any]) -> dict[str, Any]:
 
 def message_prompt_text(message: dict[str, Any]) -> str:
     return "\n".join(
-        text
-        for part in message_parts(message)
-        if (text := part_text(part)) is not None
+        text for part in message_parts(message) if (text := part_text(part)) is not None
     )
 
 

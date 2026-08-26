@@ -173,9 +173,7 @@ export default function App() {
         { method: 'POST' },
       );
       await loadScans();
-      setStatus(
-        `Push complete: ${payload.succeeded}/${payload.attempted} succeeded, ${payload.failed} failed`,
-      );
+      setStatus(`Push complete: ${payload.succeeded}/${payload.attempted} succeeded, ${payload.failed} failed`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Bulk push failed');
       await loadScans();
@@ -281,7 +279,9 @@ export default function App() {
           </div>
         </div>
         {runs.length === 0 ? (
-          <p className="empty-state">No scans tracked yet. Click Refresh Scans after exporting telemetry from the modeler.</p>
+          <p className="empty-state">
+            No scans tracked yet. Click Refresh Scans after exporting telemetry from the modeler.
+          </p>
         ) : (
           <div className="table-wrap">
             <table>
@@ -306,9 +306,7 @@ export default function App() {
                     <td>
                       <strong>{shortId(run.runId)}</strong>
                       <small>{formatDate(run.completedAt ?? run.startedAt)}</small>
-                      <small className="scan-session">
-                        Langfuse session: {scanSessionId(run)}
-                      </small>
+                      <small className="scan-session">Langfuse session: {scanSessionId(run)}</small>
                       <small className="scan-run-id">Run ID: {run.runId}</small>
                     </td>
                     <td>{run.scanStatus ?? '—'}</td>
@@ -316,17 +314,11 @@ export default function App() {
                     <td>
                       <StatusBadge status={run.pushStatus} needsPush={run.needsPush} />
                       {run.pushError ? <small>{run.pushError}</small> : null}
-                      {run.langfuseSessionId ? (
-                        <small>Pushed to {run.langfuseSessionId}</small>
-                      ) : null}
+                      {run.langfuseSessionId ? <small>Pushed to {run.langfuseSessionId}</small> : null}
                     </td>
                     <td>{formatScanVersion(run.scanVersion ?? run.exportedAt)}</td>
                     <td>
-                      <button
-                        disabled={busy || !run.needsPush}
-                        onClick={() => pushScan(run.runId)}
-                        type="button"
-                      >
+                      <button disabled={busy || !run.needsPush} onClick={() => pushScan(run.runId)} type="button">
                         Push
                       </button>
                     </td>
@@ -378,9 +370,7 @@ function scanSessionId(run: ScanRecord): string {
   if (run.langfuseSessionId?.trim()) {
     return run.langfuseSessionId.trim();
   }
-  const projectName = sanitizeProjectNameForSession(
-    run.projectName?.trim() || run.projectSlug?.trim() || 'unknown',
-  );
+  const projectName = sanitizeProjectNameForSession(run.projectName?.trim() || run.projectSlug?.trim() || 'unknown');
   const scanVersion = run.scanVersion?.trim() || run.exportedAt?.trim() || 'unknown';
   return `sysml-project:${projectName}:${scanVersion}`;
 }

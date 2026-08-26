@@ -17,6 +17,8 @@ from importer.langfuse_import import (
 from importer.timed_observation import emit_timed_item
 from importer.timeline import TimelineItem, parse_timestamp
 
+TEST_RUN_ID = "testrun001"
+
 
 def _write_bundle(
     bundle_dir: Path,
@@ -27,7 +29,7 @@ def _write_bundle(
     bundle_dir.mkdir(parents=True, exist_ok=True)
     manifest = {
         "schemaVersion": "1",
-        "runId": "abc123def4567890abc123def4567890",
+        "runId": TEST_RUN_ID,
         "projectSlug": "demo",
         "projectName": "Demo Project",
         "status": "completed",
@@ -76,7 +78,7 @@ def _write_bundle(
 
 
 def test_scan_session_id_for_manifest():
-    run_id = "abc123def4567890abc123def4567890"
+    run_id = TEST_RUN_ID
     scan_version = "2026-08-25T00:00:00+00:00"
     assert (
         scan_session_id_for_manifest(
@@ -208,17 +210,17 @@ def test_import_bundle_creates_scan_session_and_trace(mock_langfuse_cls, tmp_pat
         modeler_base_url="http://localhost:8080",
         langfuse_host="http://localhost:3000",
         langfuse_public_key="pk-test",
-        langfuse_secret_key="sk-test",
+        langfuse_secret_key="sk-test",  # pragma: allowlist secret
         langfuse_project_name="demo",
     )
     result = import_bundle(bundle_dir, config=config, scan_version="2026-08-25T00:00:00+00:00")
 
     assert result["langfuseSessionId"] == "sysml-project:Demo Project:2026-08-25T00:00:00+00:00"
-    assert result["runId"] == "abc123def4567890abc123def4567890"
+    assert result["runId"] == TEST_RUN_ID
     assert result["langfuseTraceId"] == "trace-123"
     assert result["timelineCount"] >= 2
     mock_langfuse.create_trace_id.assert_called_once_with(
-        seed="abc123def4567890abc123def4567890"
+        seed=TEST_RUN_ID
     )
     mock_langfuse.create_score.assert_called()
     mock_langfuse.flush.assert_called_once()

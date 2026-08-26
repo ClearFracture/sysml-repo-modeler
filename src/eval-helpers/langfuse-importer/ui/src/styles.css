@@ -1,7 +1,7 @@
 :root {
   color: #172326;
   background: #eef3f4;
-  font-family: "Segoe UI", system-ui, sans-serif;
+  font-family: 'Segoe UI', system-ui, sans-serif;
   line-height: 1.4;
 }
 
@@ -186,7 +186,7 @@ td small {
 .project-session,
 .scan-session,
 .scan-run-id {
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 11px;
 }
 

@@ -11,13 +11,13 @@ from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from .opencode_transcript import message_role
 from .sysml_prompts import (
     analysis_prompt,
     coverage_repair_prompt,
     enrichment_prompt,
     repair_prompt,
 )
-from .opencode_transcript import message_role
 
 logger = logging.getLogger(__name__)
 
@@ -418,7 +418,9 @@ class OpenCodeClient:
             pass
         return []
 
-    def get_session_message(self, session_id: str, message_id: str) -> dict[str, Any] | None:
+    def get_session_message(
+        self, session_id: str, message_id: str
+    ) -> dict[str, Any] | None:
         if not self.config.base_url or not message_id:
             return None
         try:

@@ -16,7 +16,11 @@ from urllib.parse import urlparse
 from ..services import MonitorInProgressError, health_to_json, import_request_from_json
 from .serializers import package_registration_to_response, project_to_response
 from .status import project_workspace_status, runtime_status
-from .web_common import ALLOWED_ARTIFACTS, is_unsafe_segment, telemetry_enabled_from_payload
+from .web_common import (
+    ALLOWED_ARTIFACTS,
+    is_unsafe_segment,
+    telemetry_enabled_from_payload,
+)
 
 logger = logging.getLogger(__name__)
 

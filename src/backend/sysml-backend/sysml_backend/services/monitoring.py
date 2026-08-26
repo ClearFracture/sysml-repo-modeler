@@ -17,7 +17,11 @@ from .opencode_client import OpenCodeClient
 from .packages import PackageRegistry
 from .run_events import RunEventStore
 from .sysml_validation import SysmlValidationResult, validate_sysml_model
-from .telemetry_export import ScanTelemetryExporter, ScanTelemetryStore, TelemetryExportResult
+from .telemetry_export import (
+    ScanTelemetryExporter,
+    ScanTelemetryStore,
+    TelemetryExportResult,
+)
 from .workspace import WorkspaceManager, slugify, to_rel
 
 logger = logging.getLogger(__name__)
@@ -108,7 +112,11 @@ class MonitoringService:
     # ---- Public synchronous API (kept for backward compatibility) ------------
 
     def start_cycle(
-        self, package_name: str, trigger: str = "manual", *, telemetry_enabled: bool = False
+        self,
+        package_name: str,
+        trigger: str = "manual",
+        *,
+        telemetry_enabled: bool = False,
     ) -> MonitoringCycle:
         package = self.package_registry.get_package(package_name)
         if package is None:
@@ -123,7 +131,11 @@ class MonitoringService:
         )
 
     def start_project_cycle(
-        self, project: dict[str, Any], trigger: str = "manual", *, telemetry_enabled: bool = False
+        self,
+        project: dict[str, Any],
+        trigger: str = "manual",
+        *,
+        telemetry_enabled: bool = False,
     ) -> MonitoringCycle:
         project_name = str(project.get("name") or project.get("slug") or "project")
         slug = str(project.get("slug") or slugify(project_name))
@@ -140,7 +152,11 @@ class MonitoringService:
     # ---- Public async API (returns run_id immediately, cycle runs in background)
 
     def start_cycle_async(
-        self, package_name: str, trigger: str = "manual", *, telemetry_enabled: bool = False
+        self,
+        package_name: str,
+        trigger: str = "manual",
+        *,
+        telemetry_enabled: bool = False,
     ) -> str:
         package = self.package_registry.get_package(package_name)
         if package is None:
@@ -155,7 +171,11 @@ class MonitoringService:
         )
 
     def start_project_cycle_async(
-        self, project: dict[str, Any], trigger: str = "manual", *, telemetry_enabled: bool = False
+        self,
+        project: dict[str, Any],
+        trigger: str = "manual",
+        *,
+        telemetry_enabled: bool = False,
     ) -> str:
         project_name = str(project.get("name") or project.get("slug") or "project")
         slug = str(project.get("slug") or slugify(project_name))
@@ -189,7 +209,9 @@ class MonitoringService:
             return None
         return self.telemetry_store.read_manifest(run_id)
 
-    def read_telemetry_file(self, run_id: str, relative_path: str) -> tuple[bytes, str] | None:
+    def read_telemetry_file(
+        self, run_id: str, relative_path: str
+    ) -> tuple[bytes, str] | None:
         if self.telemetry_store is None:
             return None
         return self.telemetry_store.read_file(run_id, relative_path)
@@ -205,8 +227,7 @@ class MonitoringService:
             return 0
         runs = self.analysis_store.list_runs(project_slug)
         run_ids = [
-            str(run.get("runId") or run.get("run_id") or "").strip()
-            for run in runs
+            str(run.get("runId") or run.get("run_id") or "").strip() for run in runs
         ]
         run_ids = [run_id for run_id in run_ids if run_id]
         return self.telemetry_store.delete_runs(run_ids)

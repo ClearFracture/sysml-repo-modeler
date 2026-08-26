@@ -15,7 +15,7 @@ def test_config_store_roundtrip(tmp_path: Path):
         modeler_base_url="http://localhost:8080",
         langfuse_host="http://localhost:3000",
         langfuse_public_key="pk-test",
-        langfuse_secret_key="sk-test",
+        langfuse_secret_key="sk-test",  # pragma: allowlist secret
         langfuse_project_name="demo",
     )
     store.save(config)

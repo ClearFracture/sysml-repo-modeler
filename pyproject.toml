@@ -34,8 +34,10 @@ Issues = "https://github.com/ClearFracture/Project-Analyzer/issues"
 asgi = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
 dev = [
     "detect-secrets==1.5.0",
+    "langfuse>=3.0",
     "pre-commit==4.5.0",
     "pytest>=9.0",
+    "requests>=2.32",
     "ruff==0.14.8",
     "isort>=8.0.1",
 ]
@@ -58,3 +60,13 @@ multi_line_output = 3
 include_trailing_comma = true
 force_grid_wrap = 0
 use_parentheses = true
+
+[tool.pytest.ini_options]
+testpaths = [
+    "src/backend/sysml-backend/tests",
+    "src/eval-helpers/langfuse-importer/tests",
+]
+pythonpath = [
+    "src/backend/sysml-backend",
+    "src/eval-helpers/langfuse-importer",
+]
