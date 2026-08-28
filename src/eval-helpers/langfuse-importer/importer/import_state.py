@@ -139,13 +139,14 @@ class ImportStateStore:
                     scan_version = scan_version_from_manifest(manifest)
                     row = connection.execute(
                         """
-                        select bundle_fingerprint, pushed_bundle_fingerprint, push_status
+                        select bundle_fingerprint, pushed_bundle_fingerprint,
+                               push_status, push_error
                         from scans where run_id = ?
                         """,
                         (run_id,),
                     ).fetchone()
                     push_status = row["push_status"] if row else None
-                    push_error = None
+                    push_error = row["push_error"] if row else None
                     pushed_fingerprint = (
                         row["pushed_bundle_fingerprint"] if row else None
                     )
@@ -293,6 +294,29 @@ class ImportStateStore:
                         ("failed", error, run_id),
                     )
                 connection.commit()
+
+    def reset_push_status(self, run_id: str) -> ScanRecord | None:
+        with self._lock:
+            with self._connect() as connection:
+                row = connection.execute(
+                    "select run_id from scans where run_id = ?", (run_id,)
+                ).fetchone()
+                if row is None:
+                    return None
+                connection.execute(
+                    """
+                    update scans set
+                      push_status = null,
+                      push_error = null,
+                      last_pushed_at = null,
+                      pushed_bundle_fingerprint = null,
+                      langfuse_session_id = null
+                    where run_id = ?
+                    """,
+                    (run_id,),
+                )
+                connection.commit()
+        return self.get_scan(run_id)
 
 
 def scan_version_from_manifest(manifest: dict[str, Any]) -> str:

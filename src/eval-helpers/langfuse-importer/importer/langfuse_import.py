@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
 from pathlib import Path
 from typing import Any
 
 from langfuse import Langfuse, propagate_attributes
+from langfuse._utils import _get_timestamp
+from pydantic import BaseModel, ConfigDict
 
 from .config_store import ImporterConfig
 from .import_state import scan_version_from_manifest
+from .langfuse_delivery import LangfuseDeliveryError, LangfuseDeliveryTracker
 from .opencode_transcript import coerce_messages
 from .timeline import TimelineItem, build_timeline, parse_timestamp
 from .timed_observation import emit_timeline, emit_timed_root
@@ -18,6 +23,49 @@ IMPORTER_VERSION = "0.6.0"
 
 class LangfuseImportError(Exception):
     pass
+
+
+class IngestionScoreBody(BaseModel):
+    """Score payload compatible with Langfuse SDK queueing and ingestion API."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str | None = None
+    trace_id: str | None = None
+    name: str
+    value: float | str
+    comment: str | None = None
+    metadata: dict[str, Any] | None = None
+    data_type: str | None = None
+
+    def model_dump(
+        self,
+        *,
+        exclude_none: bool = False,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        del kwargs
+        payload: dict[str, Any] = {
+            "name": self.name,
+            "value": self.value,
+        }
+        if self.id is not None:
+            payload["id"] = self.id
+        if self.trace_id is not None:
+            payload["traceId"] = self.trace_id
+        if self.comment is not None:
+            payload["comment"] = self.comment
+        if self.metadata is not None:
+            payload["metadata"] = self.metadata
+        if self.data_type is not None:
+            payload["dataType"] = self.data_type
+        if exclude_none:
+            return payload
+        return payload
+
+
+def trace_seed_for_import(run_id: str, scan_version: str) -> str:
+    return f"{run_id}:{scan_version}"
 
 
 def import_bundle(
@@ -59,84 +107,99 @@ def import_bundle(
         public_key=config.langfuse_public_key,
         secret_key=config.langfuse_secret_key,
         host=config.langfuse_host.rstrip("/"),
+        timeout=_langfuse_timeout_seconds(),
     )
-    trace_id = langfuse.create_trace_id(seed=run_id)
 
-    try:
-        with propagate_attributes(
-            session_id=scan_session_id,
-            trace_name=f"scan/{run_id[:8]}",
-            metadata=metadata,
-            tags=tags,
-        ):
-            scan_start = parse_timestamp(manifest.get("startedAt"))
-            scan_end = parse_timestamp(manifest.get("completedAt"))
-            scan_root_span_id = emit_timed_root(
-                langfuse,
-                trace_id=trace_id,
-                name=f"scan-{run_id[:8]}",
-                start=scan_start,
-                end=scan_end,
-                input={
-                    "project": manifest.get("projectName"),
-                    "projectSlug": manifest.get("projectSlug"),
-                    "trigger": manifest.get("trigger"),
-                    "repositories": manifest.get("repositories"),
-                    "model": model,
-                    "scanVersion": resolved_scan_version,
-                },
-                output={
-                    "status": manifest.get("status"),
-                    "validation": validation or None,
-                    "opencodeUsage": manifest.get("opencodeUsage"),
-                },
-                metadata={
-                    **metadata,
-                    "startedAt": manifest.get("startedAt"),
-                    "completedAt": manifest.get("completedAt"),
-                },
-            )
+    with LangfuseDeliveryTracker() as delivery_tracker:
+        _ensure_langfuse_connection(langfuse)
+        trace_id = langfuse.create_trace_id(
+            seed=trace_seed_for_import(run_id, resolved_scan_version)
+        )
 
-            timeline = build_timeline(
-                events,
-                messages,
-                manifest,
-                default_model=default_model,
-            )
-            cost_item = _scan_cost_summary_item(manifest, session, default_model, scan_end)
-            if cost_item is not None:
-                timeline.append(cost_item)
-                timeline.sort(key=lambda item: (item.start, item.name))
-
-            emit_timeline(
-                langfuse,
-                trace_id=trace_id,
-                parent_span_id=scan_root_span_id,
-                items=timeline,
-            )
-
-        for score_name, score in (scores.get("scores") or {}).items():
-            if not isinstance(score, dict):
-                continue
-            value = score.get("value")
-            if value is None:
-                continue
-            langfuse.create_score(
-                name=str(score_name),
-                value=value,
-                comment=score.get("comment"),
+        try:
+            with propagate_attributes(
                 session_id=scan_session_id,
-                trace_id=trace_id,
-                metadata={
-                    "scanVersion": resolved_scan_version,
-                    "sysmlRunId": run_id,
-                    "sysmlProjectSlug": manifest.get("projectSlug"),
-                },
-            )
+                trace_name=f"scan/{run_id[:8]}",
+                metadata=metadata,
+                tags=tags,
+            ):
+                scan_start = parse_timestamp(manifest.get("startedAt"))
+                scan_end = parse_timestamp(manifest.get("completedAt"))
+                scan_root_span_id = emit_timed_root(
+                    langfuse,
+                    trace_id=trace_id,
+                    name=f"scan-{run_id[:8]}",
+                    start=scan_start,
+                    end=scan_end,
+                    input={
+                        "project": manifest.get("projectName"),
+                        "projectSlug": manifest.get("projectSlug"),
+                        "trigger": manifest.get("trigger"),
+                        "repositories": manifest.get("repositories"),
+                        "model": model,
+                        "scanVersion": resolved_scan_version,
+                    },
+                    output={
+                        "status": manifest.get("status"),
+                        "validation": validation or None,
+                        "opencodeUsage": manifest.get("opencodeUsage"),
+                    },
+                    metadata={
+                        **metadata,
+                        "startedAt": manifest.get("startedAt"),
+                        "completedAt": manifest.get("completedAt"),
+                    },
+                )
 
-        langfuse.flush()
-    except Exception as error:
-        raise LangfuseImportError(str(error)) from error
+                timeline = build_timeline(
+                    events,
+                    messages,
+                    manifest,
+                    default_model=default_model,
+                )
+                cost_item = _scan_cost_summary_item(
+                    manifest, session, default_model, scan_end
+                )
+                if cost_item is not None:
+                    timeline.append(cost_item)
+                    timeline.sort(key=lambda item: (item.start, item.name))
+
+                emit_timeline(
+                    langfuse,
+                    trace_id=trace_id,
+                    parent_span_id=scan_root_span_id,
+                    items=timeline,
+                )
+
+            for score_name, score in (scores.get("scores") or {}).items():
+                if not isinstance(score, dict):
+                    continue
+                value = score.get("value")
+                if value is None:
+                    continue
+                _enqueue_trace_score(
+                    langfuse,
+                    trace_id=trace_id,
+                    name=str(score_name),
+                    value=value,
+                    score_id=langfuse._create_observation_id(
+                        seed=f"score:{trace_id}:{score_name}"
+                    ),
+                    comment=score.get("comment"),
+                    metadata={
+                        "scanVersion": resolved_scan_version,
+                        "sysmlRunId": run_id,
+                        "sysmlProjectSlug": manifest.get("projectSlug"),
+                    },
+                )
+
+            _ensure_langfuse_delivery(langfuse, delivery_tracker)
+        except LangfuseImportError:
+            raise
+        except LangfuseDeliveryError as error:
+            raise LangfuseImportError(str(error)) from error
+        except Exception as error:
+            raise LangfuseImportError(str(error)) from error
 
     return {
         "runId": run_id,
@@ -147,6 +210,95 @@ def import_bundle(
         "timelineCount": len(timeline),
         "defaultProvider": default_provider or None,
     }
+
+
+def _ensure_langfuse_connection(langfuse: Langfuse) -> None:
+    try:
+        langfuse.auth_check()
+    except Exception as error:
+        raise LangfuseImportError(
+            f"Langfuse connection or authentication failed: {error}"
+        ) from error
+
+
+def _ensure_langfuse_delivery(
+    langfuse: Langfuse,
+    delivery_tracker: LangfuseDeliveryTracker,
+) -> None:
+    _flush_langfuse_with_timeout(langfuse, _langfuse_flush_timeout_seconds())
+    delivery_tracker.raise_if_failed()
+    _ensure_langfuse_connection(langfuse)
+
+
+def _enqueue_trace_score(
+    langfuse: Langfuse,
+    *,
+    trace_id: str,
+    name: str,
+    value: float | str,
+    score_id: str,
+    comment: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    """Queue a trace score using Langfuse ingestion field names."""
+    if langfuse._resources is None:
+        raise LangfuseImportError("Langfuse client resources are not initialized.")
+
+    body = IngestionScoreBody(
+        id=score_id,
+        trace_id=trace_id,
+        name=name,
+        value=value,
+        comment=comment,
+        metadata=metadata,
+        data_type="CATEGORICAL" if isinstance(value, str) else None,
+    )
+
+    event = {
+        "id": langfuse.create_trace_id(),
+        "type": "score-create",
+        "timestamp": _get_timestamp(),
+        "body": body,
+    }
+    langfuse._resources.add_score_task(event, force_sample=True)
+
+
+def _flush_langfuse_with_timeout(langfuse: Langfuse, timeout_seconds: float) -> None:
+    errors: list[Exception] = []
+
+    def _run_flush() -> None:
+        try:
+            langfuse.flush()
+        except Exception as error:
+            errors.append(error)
+
+    worker = threading.Thread(target=_run_flush, daemon=True)
+    worker.start()
+    worker.join(timeout=timeout_seconds)
+    if worker.is_alive():
+        raise LangfuseImportError(
+            "Langfuse flush timed out after "
+            f"{timeout_seconds:g}s while uploading telemetry. "
+            "Check Langfuse availability and retry the push."
+        )
+    if errors:
+        raise LangfuseImportError(str(errors[0])) from errors[0]
+
+
+def _langfuse_timeout_seconds() -> int:
+    raw = os.environ.get("LANGFUSE_HTTP_TIMEOUT_SECONDS", "30")
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 30
+
+
+def _langfuse_flush_timeout_seconds() -> float:
+    raw = os.environ.get("LANGFUSE_FLUSH_TIMEOUT_SECONDS", "120")
+    try:
+        return max(5.0, float(raw))
+    except ValueError:
+        return 120.0
 
 
 def scan_session_id_for_manifest(

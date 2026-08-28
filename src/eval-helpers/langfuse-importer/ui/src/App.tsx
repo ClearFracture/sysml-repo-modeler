@@ -47,13 +47,25 @@ async function readJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message =
-      typeof payload === 'object' && payload && 'detail' in payload
-        ? String((payload as { detail?: string }).detail)
-        : `Request failed (${response.status})`;
-    throw new Error(message);
+    throw new Error(formatApiError(payload, response.status));
   }
   return payload as T;
+}
+
+function formatApiError(payload: unknown, status: number): string {
+  if (typeof payload === 'object' && payload && 'detail' in payload) {
+    const detail = (payload as { detail?: unknown }).detail;
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail;
+    }
+    if (typeof detail === 'object' && detail && detail !== null && 'message' in detail) {
+      const message = (detail as { message?: unknown }).message;
+      if (typeof message === 'string' && message.trim()) {
+        return message;
+      }
+    }
+  }
+  return `Request failed (${status})`;
 }
 
 export default function App() {
@@ -75,6 +87,13 @@ export default function App() {
     setConfig(payload);
   }, []);
 
+  const fetchTrackedScans = useCallback(async () => {
+    const payload = await readJson<{ runs: ScanRecord[]; summary: ScanSummary }>('/api/scans');
+    setRuns(payload.runs);
+    setSummary(payload.summary);
+    return payload;
+  }, []);
+
   const loadScans = useCallback(async () => {
     setStatus('Refreshing scans from SysML Repo Modeler');
     try {
@@ -93,16 +112,14 @@ export default function App() {
           : `Synced ${payload.updated} scan(s) from modeler`,
       );
     } catch (error) {
-      const payload = await readJson<{ runs: ScanRecord[]; summary: ScanSummary }>('/api/scans');
-      setRuns(payload.runs);
-      setSummary(payload.summary);
+      await fetchTrackedScans();
       setStatus(
         error instanceof Error
           ? `${error.message}; showing last tracked scans`
           : 'Modeler refresh failed; showing last tracked scans',
       );
     }
-  }, []);
+  }, [fetchTrackedScans]);
 
   useEffect(() => {
     loadConfig()
@@ -157,8 +174,27 @@ export default function App() {
       await loadScans();
       setStatus(`Pushed scan ${shortId(runId)} to Langfuse`);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Push failed');
-      await loadScans();
+      const message = error instanceof Error ? error.message : 'Push failed';
+      setStatus(`Push failed for ${shortId(runId)}: ${message}`);
+      try {
+        await fetchTrackedScans();
+      } catch {
+        // Keep the failed push message visible even if reload fails.
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resetPushStatus = async (runId: string) => {
+    setBusy(true);
+    setStatus(`Resetting push status for scan ${shortId(runId)}`);
+    try {
+      await readJson<{ scan: ScanRecord }>(`/api/scans/${runId}/reset-push`, { method: 'POST' });
+      await fetchTrackedScans();
+      setStatus(`Push status reset for scan ${shortId(runId)}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Reset failed');
     } finally {
       setBusy(false);
     }
@@ -313,14 +349,28 @@ export default function App() {
                     <td>{run.telemetryExportStatus ?? '—'}</td>
                     <td>
                       <StatusBadge status={run.pushStatus} needsPush={run.needsPush} />
-                      {run.pushError ? <small>{run.pushError}</small> : null}
-                      {run.langfuseSessionId ? <small>Pushed to {run.langfuseSessionId}</small> : null}
+                      {run.pushError ? <small className="push-error">{run.pushError}</small> : null}
+                      {run.langfuseSessionId && run.pushStatus === 'success' ? (
+                        <small>Pushed to {run.langfuseSessionId}</small>
+                      ) : null}
                     </td>
                     <td>{formatScanVersion(run.scanVersion ?? run.exportedAt)}</td>
                     <td>
-                      <button disabled={busy || !run.needsPush} onClick={() => pushScan(run.runId)} type="button">
-                        Push
-                      </button>
+                      <div className="row-actions">
+                        <button disabled={busy || !run.needsPush} onClick={() => pushScan(run.runId)} type="button">
+                          Push
+                        </button>
+                        {canResetPushStatus(run) ? (
+                          <button
+                            className="button-secondary"
+                            disabled={busy}
+                            onClick={() => resetPushStatus(run.runId)}
+                            type="button"
+                          >
+                            Reset
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -333,15 +383,19 @@ export default function App() {
   );
 }
 
+function canResetPushStatus(run: ScanRecord): boolean {
+  return run.pushStatus === 'success';
+}
+
 function StatusBadge({ status, needsPush }: { status?: string | null; needsPush?: boolean }) {
-  if (needsPush) {
-    return <span className="badge badge--pending">{status === 'stale' ? 'Stale' : 'Pending'}</span>;
+  if (status === 'failed') {
+    return <span className="badge badge--error">Failed</span>;
   }
   if (status === 'success') {
     return <span className="badge badge--ok">Pushed</span>;
   }
-  if (status === 'failed') {
-    return <span className="badge badge--error">Failed</span>;
+  if (needsPush) {
+    return <span className="badge badge--pending">{status === 'stale' ? 'Stale' : 'Pending'}</span>;
   }
   return <span className="badge">{status ?? '—'}</span>;
 }

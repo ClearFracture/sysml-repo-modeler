@@ -5,14 +5,19 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from importer.config_store import ImporterConfig
 from importer.langfuse_import import (
+    IngestionScoreBody,
     LangfuseImportError,
+    _enqueue_trace_score,
     map_token_usage,
     scan_session_id_for_manifest,
     import_bundle,
+    trace_seed_for_import,
 )
 from importer.timed_observation import emit_timed_item
 from importer.timeline import TimelineItem, parse_timestamp
@@ -143,10 +148,81 @@ def test_import_bundle_requires_keys(tmp_path: Path):
     assert raised
 
 
+def test_trace_seed_includes_scan_version():
+    assert (
+        trace_seed_for_import("run-1", "2026-08-25T00:00:00+00:00")
+        == "run-1:2026-08-25T00:00:00+00:00"
+    )
+
+
+def test_enqueue_trace_score_sets_trace_id_on_body():
+    langfuse = MagicMock()
+    langfuse.create_trace_id.return_value = "event-id"
+    langfuse._resources = MagicMock()
+
+    _enqueue_trace_score(
+        langfuse,
+        trace_id="abcd1234abcd1234abcd1234abcd1234",
+        name="opencode_cost",
+        value=1.25,
+        score_id="score-id",
+    )
+
+    event = langfuse._resources.add_score_task.call_args.args[0]
+    body = event["body"]
+    assert isinstance(body, IngestionScoreBody)
+    assert body.trace_id == "abcd1234abcd1234abcd1234abcd1234"
+    assert body.model_dump(exclude_none=True)["traceId"] == (
+        "abcd1234abcd1234abcd1234abcd1234"
+    )
+    assert "trace_id" not in body.model_dump(exclude_none=True)
+    assert langfuse._resources.add_score_task.call_args.kwargs["force_sample"] is True
+
+
+def test_ingestion_score_body_serializes_api_field_names():
+    body = IngestionScoreBody(
+        id="score-id",
+        trace_id="abcd1234abcd1234abcd1234abcd1234",
+        name="status",
+        value="completed",
+        data_type="CATEGORICAL",
+    )
+    payload = body.model_dump(exclude_none=True)
+    assert payload == {
+        "id": "score-id",
+        "traceId": "abcd1234abcd1234abcd1234abcd1234",
+        "name": "status",
+        "value": "completed",
+        "dataType": "CATEGORICAL",
+    }
+
+
+def test_enqueue_trace_score_marks_categorical_values():
+    langfuse = MagicMock()
+    langfuse.create_trace_id.return_value = "event-id"
+    langfuse._resources = MagicMock()
+
+    _enqueue_trace_score(
+        langfuse,
+        trace_id="abcd1234abcd1234abcd1234abcd1234",
+        name="status",
+        value="completed",
+        score_id="score-id",
+    )
+
+    body = langfuse._resources.add_score_task.call_args.args[0]["body"]
+    assert body.data_type == "CATEGORICAL"
+    assert body.model_dump(exclude_none=True)["dataType"] == "CATEGORICAL"
+
+
 @patch("importer.langfuse_import.Langfuse")
 def test_import_bundle_creates_scan_session_and_trace(mock_langfuse_cls, tmp_path: Path):
     mock_langfuse = MagicMock()
     mock_langfuse.create_trace_id.return_value = "trace-123"
+    mock_langfuse.auth_check.return_value = True
+    mock_langfuse._resources = MagicMock()
+    mock_langfuse._create_observation_id.return_value = "score-obs-1"
+    mock_langfuse.api.trace.delete.return_value = None
     mock_span = MagicMock()
     mock_span.get_span_context.return_value.span_id = 0x1234
     mock_langfuse._otel_tracer.start_span.return_value = mock_span
@@ -219,11 +295,68 @@ def test_import_bundle_creates_scan_session_and_trace(mock_langfuse_cls, tmp_pat
     assert result["runId"] == TEST_RUN_ID
     assert result["langfuseTraceId"] == "trace-123"
     assert result["timelineCount"] >= 2
-    mock_langfuse.create_trace_id.assert_called_once_with(
-        seed=TEST_RUN_ID
+    mock_langfuse.create_trace_id.assert_any_call(
+        seed=f"{TEST_RUN_ID}:2026-08-25T00:00:00+00:00"
     )
-    mock_langfuse.create_score.assert_called()
+    mock_langfuse.auth_check.assert_called()
+    mock_langfuse.api.trace.delete.assert_not_called()
+    mock_langfuse._resources.add_score_task.assert_called_once()
+    score_event = mock_langfuse._resources.add_score_task.call_args.args[0]
+    score_body = score_event["body"]
+    assert score_body.trace_id == "trace-123"
+    assert score_body.model_dump(exclude_none=True)["traceId"] == "trace-123"
+    assert mock_langfuse._resources.add_score_task.call_args.kwargs["force_sample"] is True
     mock_langfuse.flush.assert_called_once()
+    mock_langfuse.shutdown.assert_not_called()
+
+
+@patch("importer.langfuse_import.Langfuse")
+def test_import_bundle_raises_when_langfuse_unreachable(mock_langfuse_cls, tmp_path: Path):
+    mock_langfuse = MagicMock()
+    mock_langfuse.auth_check.side_effect = ConnectionError("offline")
+    mock_langfuse_cls.return_value = mock_langfuse
+
+    bundle_dir = tmp_path / "bundle"
+    _write_bundle(bundle_dir)
+    config = ImporterConfig(
+        modeler_base_url="http://localhost:8080",
+        langfuse_host="http://localhost:3000",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",  # pragma: allowlist secret
+        langfuse_project_name="demo",
+    )
+
+    with pytest.raises(LangfuseImportError, match="Langfuse connection or authentication failed"):
+        import_bundle(bundle_dir, config=config, scan_version="2026-08-25T00:00:00+00:00")
+
+
+@patch("importer.langfuse_import.Langfuse")
+def test_import_bundle_does_not_delete_trace_on_reimport(mock_langfuse_cls, tmp_path: Path):
+    mock_langfuse = MagicMock()
+    mock_langfuse.create_trace_id.return_value = "trace-123"
+    mock_langfuse.auth_check.return_value = True
+    mock_langfuse._resources = MagicMock()
+    mock_langfuse._create_observation_id.return_value = "score-obs-1"
+    mock_span = MagicMock()
+    mock_span.get_span_context.return_value.span_id = 0x1234
+    mock_langfuse._otel_tracer.start_span.return_value = mock_span
+    mock_langfuse._create_observation_from_otel_span.return_value = MagicMock()
+    mock_langfuse_cls.return_value = mock_langfuse
+
+    bundle_dir = tmp_path / "bundle"
+    _write_bundle(bundle_dir)
+    config = ImporterConfig(
+        modeler_base_url="http://localhost:8080",
+        langfuse_host="http://localhost:3000",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",  # pragma: allowlist secret
+        langfuse_project_name="demo",
+    )
+
+    import_bundle(bundle_dir, config=config, scan_version="2026-08-25T00:00:00+00:00")
+    import_bundle(bundle_dir, config=config, scan_version="2026-08-25T00:00:00+00:00")
+
+    mock_langfuse.api.trace.delete.assert_not_called()
 
 
 def test_emit_timed_item_uses_historical_start_and_end():

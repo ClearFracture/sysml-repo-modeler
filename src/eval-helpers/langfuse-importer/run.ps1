@@ -1,19 +1,25 @@
-@echo off
-setlocal
-cd /d %~dp0
+$ErrorActionPreference = "Stop"
+Set-Location $PSScriptRoot
 
-if not exist .venv (
-  python -m venv .venv
-)
+# Logging (override in the shell before running, or edit below).
+if (-not $env:IMPORTER_LOG_LEVEL) { $env:IMPORTER_LOG_LEVEL = "INFO" }
+if (-not $env:LANGFUSE_DEBUG) { $env:LANGFUSE_DEBUG = "false" }
+# For Langfuse export troubleshooting, use DEBUG + true:
+# $env:IMPORTER_LOG_LEVEL = "DEBUG"
+# $env:LANGFUSE_DEBUG = "true"
 
-call .venv\Scripts\activate.bat
-pip install -r requirements.txt
+if (-not (Test-Path ".venv")) {
+    python -m venv .venv
+}
 
-if not exist ui\dist\index.html (
-  pushd ui
-  call npm install
-  call npm run build
-  popd
-)
+& ".\.venv\Scripts\Activate.ps1"
+python -m pip install -r requirements.txt
+
+if (-not (Test-Path "ui\dist\index.html")) {
+    Push-Location ui
+    npm install
+    npm run build
+    Pop-Location
+}
 
 python -m importer

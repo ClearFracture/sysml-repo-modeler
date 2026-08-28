@@ -92,6 +92,93 @@ def test_import_state_tracks_push_and_stale(tmp_path: Path):
     assert record.needs_push() is True
 
 
+def test_sync_from_modeler_preserves_failed_push_error(tmp_path: Path):
+    store = ImportStateStore(tmp_path / "imports.db")
+    manifest = {
+        "schemaVersion": "1",
+        "exportedAt": "2026-08-25T00:00:00+00:00",
+        "status": "completed",
+        "files": ["manifest.json"],
+    }
+    store.sync_from_modeler(
+        [
+            {
+                "runId": "abc123",
+                "projectSlug": "demo",
+                "projectName": "Demo",
+                "status": "completed",
+                "telemetryExportStatus": "completed",
+                "manifest": manifest,
+            }
+        ]
+    )
+    store.mark_push_result(
+        "abc123",
+        success=False,
+        error="Langfuse export failed: Bad request",
+    )
+
+    store.sync_from_modeler(
+        [
+            {
+                "runId": "abc123",
+                "projectSlug": "demo",
+                "projectName": "Demo",
+                "status": "completed",
+                "telemetryExportStatus": "completed",
+                "manifest": manifest,
+            }
+        ]
+    )
+
+    record = store.get_scan("abc123")
+    assert record is not None
+    assert record.push_status == "failed"
+    assert record.push_error == "Langfuse export failed: Bad request"
+    assert record.needs_push() is True
+
+
+def test_reset_push_status_clears_push_history(tmp_path: Path):
+    store = ImportStateStore(tmp_path / "imports.db")
+    manifest = {
+        "schemaVersion": "1",
+        "exportedAt": "2026-08-25T00:00:00+00:00",
+        "status": "completed",
+        "files": ["manifest.json"],
+    }
+    store.sync_from_modeler(
+        [
+            {
+                "runId": "abc123",
+                "projectSlug": "demo",
+                "projectName": "Demo",
+                "status": "completed",
+                "telemetryExportStatus": "completed",
+                "manifest": manifest,
+            }
+        ]
+    )
+    record = store.get_scan("abc123")
+    assert record is not None
+    store.mark_push_result(
+        "abc123",
+        success=True,
+        bundle_fingerprint=record.bundle_fingerprint,
+        langfuse_session_id="sysml-project:Demo:2026-08-25T00:00:00+00:00",
+    )
+
+    reset = store.reset_push_status("abc123")
+    assert reset is not None
+    assert reset.push_status is None
+    assert reset.push_error is None
+    assert reset.last_pushed_at is None
+    assert reset.pushed_bundle_fingerprint is None
+    assert reset.langfuse_session_id is None
+    assert reset.needs_push() is True
+
+    assert store.reset_push_status("missing") is None
+
+
 def test_sync_from_modeler_removes_unavailable_scans(tmp_path: Path):
     store = ImportStateStore(tmp_path / "imports.db")
     manifest = {

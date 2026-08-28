@@ -58,7 +58,21 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         try:
             return service.push_scan(run_id)
         except RuntimeError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
+            record = service.state_store.get_scan(run_id)
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": str(error),
+                    "scan": record.to_json() if record else None,
+                },
+            ) from error
+
+    @app.post("/api/scans/{run_id}/reset-push")
+    def reset_push_status(run_id: str) -> dict[str, Any]:
+        try:
+            return service.reset_push_status(run_id)
+        except RuntimeError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
 
     @app.post("/api/scans/push-pending")
     def push_pending() -> dict[str, Any]:
@@ -77,9 +91,6 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         def spa(full_path: str) -> FileResponse:
             if full_path.startswith("api/"):
                 raise HTTPException(status_code=404, detail="Not found.")
-            candidate = UI_DIST / full_path
-            if candidate.is_file():
-                return FileResponse(candidate)
             return FileResponse(UI_DIST / "index.html")
 
     app.state.service = service

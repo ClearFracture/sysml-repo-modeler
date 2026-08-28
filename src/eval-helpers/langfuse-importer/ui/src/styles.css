@@ -80,6 +80,16 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.button-secondary {
+  background: #f4f7f8;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -177,6 +187,12 @@ td strong {
 td small {
   display: block;
   color: #66787d;
+}
+
+.push-error {
+  margin-top: 6px;
+  color: #9a2f2f;
+  white-space: pre-wrap;
 }
 
 .project-cell strong {

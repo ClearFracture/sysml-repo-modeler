@@ -34,6 +34,7 @@ Issues = "https://github.com/ClearFracture/Project-Analyzer/issues"
 asgi = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
 dev = [
     "detect-secrets==1.5.0",
+    "httpx>=0.27",
     "langfuse>=3.0",
     "pre-commit==4.5.0",
     "pytest>=9.0",

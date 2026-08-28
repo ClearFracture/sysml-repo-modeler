@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ class ImporterService:
         self.config_store = ConfigStore(data_dir / "config.json")
         self.state_store = ImportStateStore(data_dir / "imports.db")
         self.cache_dir = data_dir / "bundles"
+        self._push_lock = threading.Lock()
 
     def get_config(self) -> dict[str, object]:
         config = self.config_store.load()
@@ -84,6 +86,10 @@ class ImporterService:
         return [scan.to_json() for scan in self.state_store.list_scans()]
 
     def push_scan(self, run_id: str) -> dict[str, Any]:
+        with self._push_lock:
+            return self._push_scan_locked(run_id)
+
+    def _push_scan_locked(self, run_id: str) -> dict[str, Any]:
         record = self.state_store.get_scan(run_id)
         if record is None:
             raise RuntimeError(f"Scan {run_id} is not tracked. Refresh scans first.")
@@ -91,6 +97,20 @@ class ImporterService:
             raise RuntimeError(
                 f"Scan {run_id} does not have a completed telemetry export."
             )
+        if (
+            record.push_status == "success"
+            and record.pushed_bundle_fingerprint
+            and record.pushed_bundle_fingerprint == record.bundle_fingerprint
+        ):
+            return {
+                "result": {
+                    "runId": run_id,
+                    "skipped": True,
+                    "reason": "Scan already pushed for the current bundle.",
+                    "langfuseSessionId": record.langfuse_session_id,
+                },
+                "scan": record.to_json(),
+            }
         config = self.config_store.load()
         try:
             result = self._push_bundle(record, config)
@@ -112,6 +132,12 @@ class ImporterService:
             "result": result,
             "scan": updated.to_json() if updated else None,
         }
+
+    def reset_push_status(self, run_id: str) -> dict[str, Any]:
+        record = self.state_store.reset_push_status(run_id)
+        if record is None:
+            raise RuntimeError(f"Scan {run_id} is not tracked. Refresh scans first.")
+        return {"scan": record.to_json()}
 
     def push_pending(self) -> dict[str, Any]:
         scans = self.state_store.list_scans()

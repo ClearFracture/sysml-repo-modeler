@@ -8,6 +8,16 @@ from opentelemetry import trace as otel_trace_api
 from .timeline import TimelineItem, datetime_to_ns
 
 
+def observation_seed(
+    *,
+    trace_id: str,
+    parent_span_id: str | None,
+    item: TimelineItem,
+) -> str:
+    parent = parent_span_id or "root"
+    return f"{trace_id}:{parent}:{item.kind}:{item.name}"
+
+
 def emit_timeline(
     langfuse: Any,
     *,
@@ -59,6 +69,11 @@ def emit_timed_item(
             **item.metadata,
             "startTime": _iso(item.start),
             "endTime": _iso(item.end),
+            "observationSeed": observation_seed(
+                trace_id=trace_id,
+                parent_span_id=parent_span_id,
+                item=item,
+            ),
         },
         level=item.level,
         model=item.model,
