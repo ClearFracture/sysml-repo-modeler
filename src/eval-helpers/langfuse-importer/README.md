@@ -134,16 +134,16 @@ Ingestion can take 15–30 seconds to appear.
 
 ## API (optional automation)
 
-| Method | Path                       | Description                          |
-| ------ | -------------------------- | ------------------------------------ |
-| `GET`  | `/api/health`              | Health check                         |
-| `GET`  | `/api/config`              | Current config (secret not returned) |
-| `PUT`  | `/api/config`              | Save config                          |
-| `GET`  | `/api/scans`               | List tracked scans + summary         |
-| `POST` | `/api/scans/refresh`       | Refresh from modeler                 |
-| `POST` | `/api/scans/{run_id}/push` | Push one scan                        |
+| Method | Path                             | Description                                      |
+| ------ | -------------------------------- | ------------------------------------------------ |
+| `GET`  | `/api/health`                    | Health check                                     |
+| `GET`  | `/api/config`                    | Current config (secret not returned)             |
+| `PUT`  | `/api/config`                    | Save config                                      |
+| `GET`  | `/api/scans`                     | List tracked scans + summary                     |
+| `POST` | `/api/scans/refresh`             | Refresh from modeler                             |
+| `POST` | `/api/scans/{run_id}/push`       | Push one scan                                    |
 | `POST` | `/api/scans/{run_id}/reset-push` | Clear push history so a scan can be pushed again |
-| `POST` | `/api/scans/push-pending`  | Push all pending/stale/failed scans  |
+| `POST` | `/api/scans/push-pending`        | Push all pending/stale/failed scans              |
 
 Example:
 
@@ -162,15 +162,15 @@ Invoke-RestMethod http://127.0.0.1:8790/api/scans/push-pending -Method POST
 
 ## Environment variables
 
-| Variable               | Default     | Purpose         |
-| ---------------------- | ----------- | --------------- |
-| `IMPORTER_LISTEN_HOST` | `127.0.0.1` | Bind address    |
-| `IMPORTER_LISTEN_PORT` | `8790`      | Bind port       |
-| `IMPORTER_DATA_DIR`    | `./data`    | State directory |
-| `IMPORTER_LOG_LEVEL`   | `INFO`      | Uvicorn/app log level (`DEBUG`, `INFO`, `WARNING`, …) |
-| `LANGFUSE_DEBUG`       | unset       | Set to `true` for verbose Langfuse SDK export logs |
-| `LANGFUSE_HTTP_TIMEOUT_SECONDS` | `30` | Per-request timeout for Langfuse SDK HTTP calls |
-| `LANGFUSE_FLUSH_TIMEOUT_SECONDS` | `120` | Max wait for Langfuse flush during push |
+| Variable                         | Default     | Purpose                                               |
+| -------------------------------- | ----------- | ----------------------------------------------------- |
+| `IMPORTER_LISTEN_HOST`           | `127.0.0.1` | Bind address                                          |
+| `IMPORTER_LISTEN_PORT`           | `8790`      | Bind port                                             |
+| `IMPORTER_DATA_DIR`              | `./data`    | State directory                                       |
+| `IMPORTER_LOG_LEVEL`             | `INFO`      | Uvicorn/app log level (`DEBUG`, `INFO`, `WARNING`, …) |
+| `LANGFUSE_DEBUG`                 | unset       | Set to `true` for verbose Langfuse SDK export logs    |
+| `LANGFUSE_HTTP_TIMEOUT_SECONDS`  | `30`        | Per-request timeout for Langfuse SDK HTTP calls       |
+| `LANGFUSE_FLUSH_TIMEOUT_SECONDS` | `120`       | Max wait for Langfuse flush during push               |
 
 For deeper Langfuse export troubleshooting:
 
@@ -204,13 +204,13 @@ Official guide: https://langfuse.com/self-hosting/deployment/docker-compose
 
 ## Troubleshooting
 
-| Issue                                      | Check                                                                                                                                             |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Refresh fails                              | Modeler reachable? Any scans with telemetry export completed? Try `GET /api/telemetry/runs` on the modeler                                        |
-| Push fails with auth error                 | Langfuse host and API keys; keys must belong to the configured Langfuse project                                                                   |
-| Push fails but UI hides the error          | Rebuild the UI (`cd ui && npm run build`), restart the importer; failed scans show a **Failed** badge and error text under Push                   |
+| Issue                                               | Check                                                                                                                                                                                          |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Refresh fails                                       | Modeler reachable? Any scans with telemetry export completed? Try `GET /api/telemetry/runs` on the modeler                                                                                     |
+| Push fails with auth error                          | Langfuse host and API keys; keys must belong to the configured Langfuse project                                                                                                                |
+| Push fails but UI hides the error                   | Rebuild the UI (`cd ui && npm run build`), restart the importer; failed scans show a **Failed** badge and error text under Push                                                                |
 | Push hangs / UI buttons stay disabled until refresh | Restart the importer after upgrading; pushes no longer call Langfuse `shutdown()` per scan. If flush still times out, check Langfuse worker health and raise `LANGFUSE_FLUSH_TIMEOUT_SECONDS`. |
-| Push fails with Langfuse 400               | Set `LANGFUSE_DEBUG=true` and `IMPORTER_LOG_LEVEL=DEBUG`, retry push, and inspect console output for `API errors occurred`                      |
-| No traces in Langfuse                      | Wait 30s; check Langfuse worker logs; confirm push status is **Pushed**                                                                           |
-| Scan missing after refresh                 | Scan must have been run with **Export telemetry bundle** enabled                                                                                  |
-| OpenCode tools/prompts missing in Langfuse | Re-run the scan to export a fresh bundle (OpenCode v2 messages use `info.role` and are normalized at export time). Then re-push from the importer |
+| Push fails with Langfuse 400                        | Set `LANGFUSE_DEBUG=true` and `IMPORTER_LOG_LEVEL=DEBUG`, retry push, and inspect console output for `API errors occurred`                                                                     |
+| No traces in Langfuse                               | Wait 30s; check Langfuse worker logs; confirm push status is **Pushed**                                                                                                                        |
+| Scan missing after refresh                          | Scan must have been run with **Export telemetry bundle** enabled                                                                                                                               |
+| OpenCode tools/prompts missing in Langfuse          | Re-run the scan to export a fresh bundle (OpenCode v2 messages use `info.role` and are normalized at export time). Then re-push from the importer                                              |

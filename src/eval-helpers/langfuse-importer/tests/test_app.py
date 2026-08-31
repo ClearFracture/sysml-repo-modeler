@@ -15,7 +15,10 @@ def test_spa_fallback_does_not_expose_data_directory(tmp_path: Path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     secret_path = data_dir / "config.json"
-    secret_path.write_text('{"langfuseSecretKey":"super-secret"}', encoding="utf-8")
+    secret_path.write_text(
+        '{"langfuseSecretKey":"super-secret"}',  # pragma: allowlist secret
+        encoding="utf-8",
+    )
 
     ui_dist = tmp_path / "ui" / "dist"
     ui_dist.mkdir(parents=True)
