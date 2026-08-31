@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from opentelemetry.sdk.trace import TracerProvider
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -19,10 +20,39 @@ from importer.langfuse_import import (
     import_bundle,
     trace_seed_for_import,
 )
-from importer.timed_observation import emit_timed_item
+from importer.timed_observation import _start_span_with_id, emit_timed_item
 from importer.timeline import TimelineItem, parse_timestamp
 
 TEST_RUN_ID = "testrun001"
+
+
+class _RecordingIdGenerator:
+    def __init__(self) -> None:
+        self._next_span_id = 1
+
+    def generate_span_id(self) -> int:
+        span_id = self._next_span_id
+        self._next_span_id += 1
+        return span_id
+
+    def generate_trace_id(self) -> int:
+        return 1
+
+    def is_trace_id_random(self) -> bool:
+        return False
+
+
+class _RecordingTracer:
+    def __init__(self) -> None:
+        self.id_generator = _RecordingIdGenerator()
+        self.span_ids: list[int] = []
+
+    def start_span(self, name: str, *, start_time: int) -> MagicMock:
+        span = MagicMock()
+        span_id = self.id_generator.generate_span_id()
+        span.get_span_context.return_value.span_id = span_id
+        self.span_ids.append(span_id)
+        return span
 
 
 def _write_bundle(
@@ -153,6 +183,30 @@ def test_trace_seed_includes_scan_version():
         trace_seed_for_import("run-1", "2026-08-25T00:00:00+00:00")
         == "run-1:2026-08-25T00:00:00+00:00"
     )
+
+
+def test_start_span_with_id_uses_requested_id_and_restores_generator():
+    tracer = TracerProvider().get_tracer("langfuse-importer-idempotency-test")
+    original_generator = tracer.id_generator
+
+    first = _start_span_with_id(
+        tracer,
+        name="same-observation",
+        start_time=1,
+        observation_id="0123456789abcdef",
+    )
+    second = _start_span_with_id(
+        tracer,
+        name="same-observation",
+        start_time=1,
+        observation_id="0123456789abcdef",
+    )
+
+    assert first.get_span_context().span_id == int("0123456789abcdef", 16)
+    assert second.get_span_context().span_id == first.get_span_context().span_id
+    assert tracer.id_generator is original_generator
+    first.end()
+    second.end()
 
 
 def test_enqueue_trace_score_sets_trace_id_on_body():
@@ -331,20 +385,33 @@ def test_import_bundle_raises_when_langfuse_unreachable(mock_langfuse_cls, tmp_p
 
 
 @patch("importer.langfuse_import.Langfuse")
-def test_import_bundle_does_not_delete_trace_on_reimport(mock_langfuse_cls, tmp_path: Path):
+def test_import_bundle_reuses_observation_ids_on_reimport(
+    mock_langfuse_cls, tmp_path: Path
+):
     mock_langfuse = MagicMock()
     mock_langfuse.create_trace_id.return_value = "trace-123"
     mock_langfuse.auth_check.return_value = True
     mock_langfuse._resources = MagicMock()
     mock_langfuse._create_observation_id.return_value = "score-obs-1"
-    mock_span = MagicMock()
-    mock_span.get_span_context.return_value.span_id = 0x1234
-    mock_langfuse._otel_tracer.start_span.return_value = mock_span
+    tracer = _RecordingTracer()
+    mock_langfuse._otel_tracer = tracer
     mock_langfuse._create_observation_from_otel_span.return_value = MagicMock()
     mock_langfuse_cls.return_value = mock_langfuse
 
     bundle_dir = tmp_path / "bundle"
-    _write_bundle(bundle_dir)
+    _write_bundle(
+        bundle_dir,
+        events=[
+            {
+                "phase": "validation",
+                "timestamp": "2026-08-25T00:01:00+00:00",
+            },
+            {
+                "phase": "validation",
+                "timestamp": "2026-08-25T00:02:00+00:00",
+            },
+        ],
+    )
     config = ImporterConfig(
         modeler_base_url="http://localhost:8080",
         langfuse_host="http://localhost:3000",
@@ -353,9 +420,22 @@ def test_import_bundle_does_not_delete_trace_on_reimport(mock_langfuse_cls, tmp_
         langfuse_project_name="demo",
     )
 
-    import_bundle(bundle_dir, config=config, scan_version="2026-08-25T00:00:00+00:00")
-    import_bundle(bundle_dir, config=config, scan_version="2026-08-25T00:00:00+00:00")
+    first = import_bundle(
+        bundle_dir,
+        config=config,
+        scan_version="2026-08-25T00:00:00+00:00",
+    )
+    import_bundle(
+        bundle_dir,
+        config=config,
+        scan_version="2026-08-25T00:00:00+00:00",
+    )
 
+    observations_per_import = first["timelineCount"] + 1
+    first_ids = tracer.span_ids[:observations_per_import]
+    second_ids = tracer.span_ids[observations_per_import:]
+    assert first_ids == second_ids
+    assert len(first_ids) == len(set(first_ids))
     mock_langfuse.api.trace.delete.assert_not_called()
 
 
