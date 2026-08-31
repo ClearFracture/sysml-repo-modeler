@@ -11,6 +11,7 @@ from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from .opencode_transcript import message_role
 from .sysml_prompts import (
     analysis_prompt,
     coverage_repair_prompt,
@@ -408,11 +409,52 @@ class OpenCodeClient:
             if isinstance(response, list):
                 return response
             if isinstance(response, dict):
-                items = response.get("items", [])
-                return items if isinstance(items, list) else []
+                items = response.get("items")
+                if isinstance(items, list):
+                    return items
+                if response.get("info"):
+                    return [response]
         except (HTTPError, URLError, TimeoutError, OpenCodeProtocolError):
             pass
         return []
+
+    def get_session_message(
+        self, session_id: str, message_id: str
+    ) -> dict[str, Any] | None:
+        if not self.config.base_url or not message_id:
+            return None
+        try:
+            response = self._request_any(
+                "GET",
+                f"/session/{session_id}/message/{message_id}",
+                None,
+            )
+            if isinstance(response, dict) and response.get("info"):
+                return response
+        except (HTTPError, URLError, TimeoutError, OpenCodeProtocolError):
+            pass
+        return None
+
+    def get_session_transcript(self, session_id: str) -> list[dict[str, Any]]:
+        from .opencode_transcript import normalize_opencode_message
+
+        transcript: list[dict[str, Any]] = []
+        for raw in self.get_session_messages(session_id):
+            if not isinstance(raw, dict):
+                continue
+            message = raw
+            info = message.get("info")
+            info = info if isinstance(info, dict) else {}
+            message_id = info.get("id")
+            parts = message.get("parts")
+            if message_id and (not isinstance(parts, list) or not parts):
+                detail = self.get_session_message(session_id, str(message_id))
+                if detail:
+                    message = detail
+            normalized = normalize_opencode_message(message)
+            if normalized is not None:
+                transcript.append(normalized)
+        return transcript
 
     def _create_session(self, run_id: str) -> dict[str, Any]:
         body: dict[str, Any] = {"title": f"SYSML {run_id[:8]}"}
@@ -777,17 +819,17 @@ def _response_events(response: Any) -> list[dict[str, Any]]:
 def _extract_assistant_messages(response: Any) -> list[str]:
     messages: list[str] = []
     for event in _response_events(response):
-        role_or_type = event.get("type") or event.get("role") or ""
-        if role_or_type != "assistant":
+        if message_role(event) != "assistant":
             continue
         text = _message_text(event)
         if text:
             messages.append(text)
 
     if not messages and isinstance(response, dict) and "parts" in response:
-        text = _message_text(response)
-        if text:
-            messages.append(text)
+        if message_role(response) == "assistant" or response.get("parts"):
+            text = _message_text(response)
+            if text:
+                messages.append(text)
 
     return messages
 

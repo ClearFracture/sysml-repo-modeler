@@ -149,9 +149,10 @@ class AnalysisStore:
                           started_at, completed_at, repository_count, changed_count,
                           unchanged_count, repositories, opencode_session_id,
                           opencode_cost, input_tokens, output_tokens, total_tokens,
-                          opencode_usage
+                          opencode_usage, telemetry_enabled, telemetry_export_path,
+                          telemetry_export_status, telemetry_exported_at
                         )
-                        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         on conflict (run_id) do update set
                           project_slug = excluded.project_slug,
                           project_name = excluded.project_name,
@@ -168,7 +169,11 @@ class AnalysisStore:
                           input_tokens = excluded.input_tokens,
                           output_tokens = excluded.output_tokens,
                           total_tokens = excluded.total_tokens,
-                          opencode_usage = excluded.opencode_usage
+                          opencode_usage = excluded.opencode_usage,
+                          telemetry_enabled = excluded.telemetry_enabled,
+                          telemetry_export_path = excluded.telemetry_export_path,
+                          telemetry_export_status = excluded.telemetry_export_status,
+                          telemetry_exported_at = excluded.telemetry_exported_at
                         """,
                         (
                             cycle.run_id,
@@ -188,6 +193,12 @@ class AnalysisStore:
                             _usage_int(cycle.opencode_usage, "outputTokens"),
                             _usage_int(cycle.opencode_usage, "totalTokens"),
                             Jsonb(cycle.opencode_usage or {}),
+                            cycle.telemetry_enabled,
+                            cycle.telemetry_export_path,
+                            cycle.telemetry_export_status,
+                            _parse_datetime(cycle.telemetry_exported_at)
+                            if cycle.telemetry_exported_at
+                            else None,
                         ),
                     )
                     for artifact in cycle.artifacts:
@@ -230,6 +241,8 @@ class AnalysisStore:
                       r.changed_count, r.unchanged_count, r.repositories,
                       r.opencode_session_id, r.opencode_cost, r.input_tokens,
                       r.output_tokens, r.total_tokens, r.opencode_usage,
+                      r.telemetry_enabled, r.telemetry_export_path,
+                      r.telemetry_export_status, r.telemetry_exported_at,
                       coalesce(
                         jsonb_agg(
                           jsonb_build_object('passId', a.pass_id)
@@ -374,7 +387,7 @@ def _run_row_to_json(row: tuple[Any, ...]) -> dict[str, Any]:
     repositories = repositories if isinstance(repositories, list) else []
     usage = row[16]
     usage = usage if isinstance(usage, dict) else {}
-    artifacts = row[17]
+    artifacts = row[21]
     artifacts = artifacts if isinstance(artifacts, list) else []
     return {
         "runId": row[0],
@@ -407,6 +420,14 @@ def _run_row_to_json(row: tuple[Any, ...]) -> dict[str, Any]:
         "total_tokens": row[15],
         "opencodeUsage": usage,
         "opencode_usage": usage,
+        "telemetryEnabled": row[17],
+        "telemetry_enabled": row[17],
+        "telemetryExportPath": row[18],
+        "telemetry_export_path": row[18],
+        "telemetryExportStatus": row[19],
+        "telemetry_export_status": row[19],
+        "telemetryExportedAt": _iso(row[20]) if row[20] is not None else None,
+        "telemetry_exported_at": _iso(row[20]) if row[20] is not None else None,
     }
 
 

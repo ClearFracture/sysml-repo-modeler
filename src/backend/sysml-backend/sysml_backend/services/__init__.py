@@ -31,6 +31,7 @@ from .sysml_prompts import (
     repair_prompt,
     repo_lines,
 )
+from .telemetry_export import ScanTelemetryExporter, ScanTelemetryStore
 from .workspace import (
     PackageWorkspace,
     WorkspaceManager,
@@ -58,6 +59,8 @@ __all__ = [
     "import_request_from_json",
     "import_result_to_json",
     "RunEventStore",
+    "ScanTelemetryExporter",
+    "ScanTelemetryStore",
     "analysis_prompt",
     "analysis_system_prompt",
     "analysis_user_prompt",
