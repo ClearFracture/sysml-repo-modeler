@@ -424,6 +424,8 @@ def _dependency_candidates(
     for record in records if isinstance(records, list) else []:
         if not isinstance(record, dict):
             continue
+        if record.get("confidence") == "low":
+            continue
         topic = str(record.get("category") or "")
         if topic not in _DEPENDENCY_CATEGORIES:
             continue
@@ -748,7 +750,17 @@ def _evidence_ref(record: dict[str, Any]) -> str:
 def _compact_record(record: dict[str, Any]) -> dict[str, Any]:
     return {
         key: record.get(key)
-        for key in ("category", "kind", "name", "repository", "path", "line", "excerpt")
+        for key in (
+            "category",
+            "kind",
+            "name",
+            "repository",
+            "path",
+            "line",
+            "excerpt",
+            "context",
+            "confidence",
+        )
     }
 
 

@@ -13,6 +13,7 @@ _TEXT_SUFFIXES = {
     ".ini",
     ".json",
     ".md",
+    ".php",
     ".properties",
     ".py",
     ".sh",
@@ -35,6 +36,8 @@ _SKIP_DIRS = {
     "dist",
     "node_modules",
     "target",
+    "vendor",
+    "vendors",
 }
 
 _NON_RUNTIME_PATH_PARTS = {
@@ -54,6 +57,7 @@ _NON_RUNTIME_PATH_PARTS = {
     "tests",
 }
 _DOCUMENTATION_FILENAMES = {
+    "changelog.txt",
     "changelog.md",
     "contributing.md",
     "history.md",
@@ -361,6 +365,13 @@ def _scan_file(
             match = regex.search(sanitized)
             if not match:
                 continue
+            if kind == "docker" and not _is_architecture_file(relative_path):
+                continue
+            if category in {"ingress", "port"} and context not in {
+                "configuration",
+                "deployment",
+            }:
+                continue
             records.append(
                 {
                     "category": category,
@@ -459,7 +470,13 @@ def _evidence_context(path: Path) -> str:
     filename = path.name.lower()
     if any(_is_non_runtime_name(part) for part in (*path.parts[:-1], filename)):
         return "non_runtime"
-    if filename in _DOCUMENTATION_FILENAMES or path.suffix.lower() == ".md":
+    if (
+        filename in _DOCUMENTATION_FILENAMES
+        or filename.startswith(("changelog.", "history.", "license."))
+        or filename.endswith((".license", ".license.txt"))
+        or filename in {"copying", "license", "notice"}
+        or path.suffix.lower() == ".md"
+    ):
         return "documentation"
     if _is_architecture_file(path):
         return "deployment"

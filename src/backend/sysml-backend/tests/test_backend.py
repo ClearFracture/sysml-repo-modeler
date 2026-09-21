@@ -255,6 +255,41 @@ def test_evidence_preserves_names_for_multiple_database_dependencies(tmp_path):
     }
 
 
+def test_low_confidence_evidence_is_not_a_dependency_candidate():
+    classifier = ArchitectureClassifier(
+        ArchitectureClassifierConfig(
+            api_key=None,
+            base_url="https://api.typesafe.ai",
+            model="jev-1.13.0",
+            confidence_threshold=0.8,
+            timeout_seconds=30,
+        )
+    )
+    inventory = classifier.classify(
+        {
+            "name": "Demo",
+            "repositories": [{"name": "orders-api", "path": "repos/orders-api"}],
+        },
+        {
+            "records": [
+                {
+                    "category": "cache",
+                    "kind": "redis",
+                    "name": "Redis",
+                    "repository": "orders-api",
+                    "path": "ChangeLog.txt",
+                    "line": 2,
+                    "excerpt": "Redis support was fixed.",
+                    "context": "documentation",
+                    "confidence": "low",
+                }
+            ]
+        },
+    )
+
+    assert inventory["dependencies"] == []
+
+
 def test_service_endpoint_dependency_links_registered_repositories():
     classifier = ArchitectureClassifier(
         ArchitectureClassifierConfig(
