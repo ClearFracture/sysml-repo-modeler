@@ -167,6 +167,42 @@ def test_jev_is_optional_and_llm_resolves_all_candidates():
     assert resolved["dependencies"][0]["classification"] == "runtime_database"
 
 
+def test_llm_unknown_is_a_completed_classification_decision():
+    inventory = {
+        "components": [],
+        "dependencies": [
+            {
+                "key": "dependency:orders:observability:metrics",
+                "questionId": "dependency_0",
+                "classification": "unknown",
+            }
+        ],
+        "unresolved": [
+            {
+                "id": "dependency_0",
+                "kind": "dependency_classification",
+                "subjectKey": "dependency:orders:observability:metrics",
+                "allowedValues": ["platform_service", "unknown"],
+            }
+        ],
+        "deduplication": {"decisions": [], "mergedGroups": []},
+    }
+    resolved = apply_llm_architecture_decisions(
+        inventory,
+        [
+            {
+                "id": "dependency_0",
+                "value": "unknown",
+                "confidence": 0.75,
+                "reason": "The evidence does not identify a concrete service.",
+            }
+        ],
+    )
+    assert resolved["summary"]["unresolvedCount"] == 0
+    assert resolved["dependencies"][0]["classification"] == "unknown"
+    assert resolved["dependencies"][0]["decision"]["status"] == "accepted"
+
+
 def test_same_topic_dependencies_stay_separate_without_identity_decision():
     dependencies = [
         {
@@ -205,7 +241,9 @@ def test_same_topic_dependencies_stay_separate_without_identity_decision():
 def test_evidence_preserves_names_for_multiple_database_dependencies(tmp_path):
     env_file = tmp_path / ".env.example"
     env_file.write_text(
-        "ORDERS_DATABASE_URL=postgres://orders\nAUDIT_DATABASE_URL=postgres://audit\n",
+        "ORDERS_DATABASE_URL=postgres://orders\n"
+        "AUDIT_DATABASE_URL=postgres://audit\n"
+        "BACKEND_LISTEN_HOST=0.0.0.0\n",
         encoding="utf-8",
     )
     records = _scan_file("orders-api", tmp_path, env_file)

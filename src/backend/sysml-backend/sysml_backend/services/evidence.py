@@ -150,7 +150,7 @@ _SIGNALS: list[tuple[str, str, re.Pattern[str]]] = [
         "service",
         "service_endpoint",
         re.compile(
-            r"\b([A-Z][A-Z0-9_]*(?:_BASE_URL|_SERVICE_URL|_API_URL|_ENDPOINT|_HOST))\b"
+            r"\b([A-Z][A-Z0-9_]*(?:_BASE_URL|_SERVICE_URL|_API_URL|_ENDPOINT|_SERVICE_HOST))\b"
         ),
     ),
 ]

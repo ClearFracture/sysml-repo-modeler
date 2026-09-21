@@ -236,7 +236,7 @@ def apply_llm_architecture_decisions(
         if kind in {"component_classification", "dependency_classification"}:
             allowed = pending.get("allowedValues", [])
             value = str(raw.get("value") or "")
-            if value not in allowed or value == "unknown":
+            if value not in allowed:
                 continue
             target = components.get(decision_id) or dependencies.get(decision_id)
             if target is None:
