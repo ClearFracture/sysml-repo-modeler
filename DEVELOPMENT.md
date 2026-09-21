@@ -1,6 +1,6 @@
 # Local Development
 
-This guide covers running Project Analyzer from source with Vite hot reload and a
+This guide covers running SysML Repo Modeler from source with Vite hot reload and a
 backend running locally. Unlike the [Docker Compose](README.md#quick-start) path,
 source development does **not** start Postgres or OpenCode for you — you point
 the app at your own instances.
@@ -157,7 +157,14 @@ python -m pip install -e ".[dev]"
 pre-commit install
 ```
 
-Run the backend test suite:
+Run the test suite:
+
+```powershell
+pytest
+```
+
+The `dev` extra includes dependencies for both the backend and the Langfuse
+importer helper tests. Backend-only:
 
 ```powershell
 pytest src\backend\sysml-backend\tests

@@ -13,17 +13,14 @@ from re import Match
 from typing import Any
 from urllib.parse import urlparse
 
-from ..services import (
-    MonitorInProgressError,
-    health_to_json,
-    import_request_from_json,
-)
-from .serializers import (
-    package_registration_to_response,
-    project_to_response,
-)
+from ..services import MonitorInProgressError, health_to_json, import_request_from_json
+from .serializers import package_registration_to_response, project_to_response
 from .status import project_workspace_status, runtime_status
-from .web_common import ALLOWED_ARTIFACTS, is_unsafe_segment
+from .web_common import (
+    ALLOWED_ARTIFACTS,
+    is_unsafe_segment,
+    telemetry_enabled_from_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +238,81 @@ class SysmlBackendHandler(BaseHTTPRequestHandler):
             )
             return
         self.respond_json({"runId": run_id, "architecture": architecture})
+
+    def get_telemetry_runs(self, match: Match[str]) -> None:
+        self.respond_json(
+            {"runs": self.server.monitoring_service.list_telemetry_runs()}
+        )
+
+    def get_telemetry_run(self, match: Match[str]) -> None:
+        run_id = match.group("run_id")
+        if is_unsafe_segment(run_id):
+            self.respond_json(
+                {"error": "invalid_request", "message": "Invalid run identifier."},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+        manifest = self.server.monitoring_service.get_telemetry_manifest(run_id)
+        if manifest is None:
+            self.respond_json(
+                {
+                    "error": "not_found",
+                    "message": f"Telemetry bundle for run {run_id} was not found.",
+                },
+                status=HTTPStatus.NOT_FOUND,
+            )
+            return
+        self.respond_json({"runId": run_id, "manifest": manifest})
+
+    def get_telemetry_file(self, match: Match[str]) -> None:
+        run_id = match.group("run_id")
+        relative_path = match.group("relative_path")
+        if is_unsafe_segment(run_id):
+            self.respond_json(
+                {"error": "invalid_request", "message": "Invalid run identifier."},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+        payload = self.server.monitoring_service.read_telemetry_file(
+            run_id, relative_path
+        )
+        if payload is None:
+            self.respond_json(
+                {
+                    "error": "not_found",
+                    "message": f"Telemetry file {relative_path} was not found.",
+                },
+                status=HTTPStatus.NOT_FOUND,
+            )
+            return
+        body, content_type = payload
+        self.respond_bytes(body, content_type=content_type)
+
+    def get_telemetry_bundle(self, match: Match[str]) -> None:
+        run_id = match.group("run_id")
+        if is_unsafe_segment(run_id):
+            self.respond_json(
+                {"error": "invalid_request", "message": "Invalid run identifier."},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+        archive = self.server.monitoring_service.read_telemetry_bundle(run_id)
+        if archive is None:
+            self.respond_json(
+                {
+                    "error": "not_found",
+                    "message": f"Telemetry bundle for run {run_id} was not found.",
+                },
+                status=HTTPStatus.NOT_FOUND,
+            )
+            return
+        self.respond_bytes(
+            archive,
+            content_type="application/gzip",
+            extra_headers={
+                "Content-Disposition": f'attachment; filename="{run_id}.tar.gz"'
+            },
+        )
 
     def get_artifact(self, match: Match[str]) -> None:
         run_id = match.group("run_id")
@@ -507,8 +579,12 @@ class SysmlBackendHandler(BaseHTTPRequestHandler):
         project = self._require_project(match.group("name"))
         if project is None:
             return
+        payload = self.read_json_body()
+        telemetry_enabled = telemetry_enabled_from_payload(payload)
         try:
-            run_id = self.server.monitoring_service.start_project_cycle_async(project)
+            run_id = self.server.monitoring_service.start_project_cycle_async(
+                project, telemetry_enabled=telemetry_enabled
+            )
         except MonitorInProgressError as error:
             self.respond_json(
                 {"error": "conflict", "message": str(error)},
@@ -552,8 +628,12 @@ class SysmlBackendHandler(BaseHTTPRequestHandler):
 
     def post_monitor_package(self, match: Match[str]) -> None:
         package_name = match.group("name")
+        payload = self.read_json_body()
+        telemetry_enabled = telemetry_enabled_from_payload(payload)
         try:
-            run_id = self.server.monitoring_service.start_cycle_async(package_name)
+            run_id = self.server.monitoring_service.start_cycle_async(
+                package_name, telemetry_enabled=telemetry_enabled
+            )
         except MonitorInProgressError as error:
             self.respond_json(
                 {"error": "conflict", "message": str(error)},
@@ -611,6 +691,7 @@ class SysmlBackendHandler(BaseHTTPRequestHandler):
             return
         try:
             deleted_slug = self.server.project_workspace.delete_project(slug)
+            self.server.monitoring_service.delete_project_telemetry(deleted_slug)
             self.server.analysis_store.delete_project(deleted_slug)
         except ValueError as error:
             self.respond_json(
@@ -698,12 +779,15 @@ class SysmlBackendHandler(BaseHTTPRequestHandler):
         *,
         content_type: str,
         status: HTTPStatus = HTTPStatus.OK,
+        extra_headers: dict[str, str] | None = None,
     ) -> None:
         self._responded = True
         self.send_response(status)
         self.send_cors_headers()
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        for key, value in (extra_headers or {}).items():
+            self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)
 
@@ -782,6 +866,19 @@ SysmlBackendHandler._GET_ROUTES = _compile(
         (r"/api/packages", "get_packages"),
         (r"/api/runs", "get_runs"),
         (r"/api/runs/inflight", "get_runs_inflight"),
+        (r"/api/telemetry/runs", "get_telemetry_runs"),
+        (
+            rf"/api/telemetry/runs/(?P<run_id>{_SAFE_SEGMENT})/bundle",
+            "get_telemetry_bundle",
+        ),
+        (
+            rf"/api/telemetry/runs/(?P<run_id>{_SAFE_SEGMENT})/files/(?P<relative_path>.+)",
+            "get_telemetry_file",
+        ),
+        (
+            rf"/api/telemetry/runs/(?P<run_id>{_SAFE_SEGMENT})",
+            "get_telemetry_run",
+        ),
         (
             rf"/api/runs/(?P<run_id>{_SAFE_SEGMENT})/events/stream",
             "get_run_events_stream",

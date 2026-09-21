@@ -23,19 +23,16 @@ from fastapi import Body, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
-from ..services import (
-    MonitorInProgressError,
-    health_to_json,
-    import_request_from_json,
-)
+from ..services import MonitorInProgressError, health_to_json, import_request_from_json
 from ..utils import BackendConfig, load_config
-from .serializers import (
-    package_registration_to_response,
-    project_to_response,
-)
+from .serializers import package_registration_to_response, project_to_response
 from .server import Services, build_services
 from .status import project_workspace_status, runtime_status
-from .web_common import ALLOWED_ARTIFACTS, is_unsafe_segment
+from .web_common import (
+    ALLOWED_ARTIFACTS,
+    is_unsafe_segment,
+    telemetry_enabled_from_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +190,54 @@ def _register_routes(app: FastAPI, services: Services) -> None:
                 f"Architecture inventory for run {run_id} was not found.",
             )
         return {"runId": run_id, "architecture": architecture}
+
+    @app.get("/api/telemetry/runs")
+    def telemetry_runs() -> Any:
+        return {"runs": services.monitoring_service.list_telemetry_runs()}
+
+    @app.get("/api/telemetry/runs/{run_id}/bundle")
+    def telemetry_bundle(run_id: str) -> Any:
+        if is_unsafe_segment(run_id):
+            return _error(400, "invalid_request", "Invalid run identifier.")
+        archive = services.monitoring_service.read_telemetry_bundle(run_id)
+        if archive is None:
+            return _error(
+                404,
+                "not_found",
+                f"Telemetry bundle for run {run_id} was not found.",
+            )
+        return Response(
+            content=archive,
+            media_type="application/gzip",
+            headers={"Content-Disposition": f'attachment; filename="{run_id}.tar.gz"'},
+        )
+
+    @app.get("/api/telemetry/runs/{run_id}/files/{relative_path:path}")
+    def telemetry_file(run_id: str, relative_path: str) -> Any:
+        if is_unsafe_segment(run_id):
+            return _error(400, "invalid_request", "Invalid run identifier.")
+        payload = services.monitoring_service.read_telemetry_file(run_id, relative_path)
+        if payload is None:
+            return _error(
+                404,
+                "not_found",
+                f"Telemetry file {relative_path} was not found.",
+            )
+        body, content_type = payload
+        return Response(content=body, media_type=content_type)
+
+    @app.get("/api/telemetry/runs/{run_id}")
+    def telemetry_run(run_id: str) -> Any:
+        if is_unsafe_segment(run_id):
+            return _error(400, "invalid_request", "Invalid run identifier.")
+        manifest = services.monitoring_service.get_telemetry_manifest(run_id)
+        if manifest is None:
+            return _error(
+                404,
+                "not_found",
+                f"Telemetry bundle for run {run_id} was not found.",
+            )
+        return {"runId": run_id, "manifest": manifest}
 
     @app.get("/api/runs/{run_id}/passes/{pass_id}/artifacts/{artifact_name}")
     def artifact(run_id: str, pass_id: str, artifact_name: str) -> Any:
@@ -411,12 +456,15 @@ def _register_routes(app: FastAPI, services: Services) -> None:
         )
 
     @app.post("/api/projects/{name}/monitor")
-    def monitor_project(name: str) -> Any:
+    def monitor_project(name: str, payload: dict[str, Any] = Body(default=None)) -> Any:
         project = _require_project(name)
         if project is None:
             return _error(404, "not_found", f"Project {name} was not found.")
+        telemetry_enabled = telemetry_enabled_from_payload(payload)
         try:
-            run_id = services.monitoring_service.start_project_cycle_async(project)
+            run_id = services.monitoring_service.start_project_cycle_async(
+                project, telemetry_enabled=telemetry_enabled
+            )
         except MonitorInProgressError as error:
             return _error(409, "conflict", str(error))
         except ValueError as error:
@@ -443,9 +491,12 @@ def _register_routes(app: FastAPI, services: Services) -> None:
         )
 
     @app.post("/api/packages/{name}/monitor")
-    def monitor_package(name: str) -> Any:
+    def monitor_package(name: str, payload: dict[str, Any] = Body(default=None)) -> Any:
+        telemetry_enabled = telemetry_enabled_from_payload(payload)
         try:
-            run_id = services.monitoring_service.start_cycle_async(name)
+            run_id = services.monitoring_service.start_cycle_async(
+                name, telemetry_enabled=telemetry_enabled
+            )
         except MonitorInProgressError as error:
             return _error(409, "conflict", str(error))
         except ValueError as error:
@@ -472,6 +523,19 @@ def _register_routes(app: FastAPI, services: Services) -> None:
                 slug, repo_name
             )
             services.analysis_store.save_project(project_to_response(updated_project))
+        except ValueError as error:
+            return _error(400, "invalid_request", str(error))
+        return Response(status_code=204)
+
+    @app.delete("/api/projects/{slug}")
+    def delete_project(slug: str) -> Any:
+        project = _require_project(slug)
+        if project is None:
+            return _error(404, "not_found", f"Project {slug} was not found.")
+        try:
+            deleted_slug = services.project_workspace.delete_project(slug)
+            services.monitoring_service.delete_project_telemetry(deleted_slug)
+            services.analysis_store.delete_project(deleted_slug)
         except ValueError as error:
             return _error(400, "invalid_request", str(error))
         return Response(status_code=204)

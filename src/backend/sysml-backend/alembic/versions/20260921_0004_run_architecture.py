@@ -1,7 +1,7 @@
 """persist classified architecture inventory
 
-Revision ID: 20260921_0003
-Revises: 20260609_0002
+Revision ID: 20260921_0004
+Revises: 20260825_0003
 Create Date: 2026-09-21
 """
 
@@ -11,8 +11,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = "20260921_0003"
-down_revision = "20260609_0002"
+revision = "20260921_0004"
+down_revision = "20260825_0003"
 branch_labels = None
 depends_on = None
 

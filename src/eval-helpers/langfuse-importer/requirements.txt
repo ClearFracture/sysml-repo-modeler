@@ -1,0 +1,4 @@
+fastapi>=0.115
+langfuse>=3.0
+requests>=2.32
+uvicorn[standard]>=0.29

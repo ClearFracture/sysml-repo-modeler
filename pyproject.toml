@@ -1,46 +1,50 @@
 [project]
 name = "project-analyzer"
 version = "0.1.0"
-description = "Generate and explore SysML v2 architecture models from multi-repository source code."
+description = "Turn GitHub repositories into validated SysML v2 system models and interactive architecture graphs."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-keywords = ["architecture", "sysml", "sysml-v2", "software-architecture", "opencode"]
+keywords = [
+    "architecture",
+    "sysml",
+    "sysml-v2",
+    "software-architecture",
+    "opencode",
+]
 classifiers = [
-  "Development Status :: 3 - Alpha",
-  "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
-  "Topic :: Software Development :: Documentation",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Documentation",
 ]
-dependencies = [
-  "alembic>=1.17",
-  "psycopg[binary]>=3.2",
-  "sqlalchemy>=2.0",
-]
+dependencies = ["alembic>=1.17", "psycopg[binary]>=3.2", "sqlalchemy>=2.0"]
 
 [project.urls]
-Homepage = "https://github.com/ClearFracture/project-analyzer"
-Source = "https://github.com/ClearFracture/project-analyzer"
-Issues = "https://github.com/ClearFracture/project-analyzer/issues"
+Homepage = "https://github.com/ClearFracture/Project-Analyzer"
+Source = "https://github.com/ClearFracture/Project-Analyzer"
+Issues = "https://github.com/ClearFracture/Project-Analyzer/issues"
 
 [project.optional-dependencies]
 # Optional ASGI front end. The default `python -m sysml_backend` server needs none of these.
-asgi = [
-  "fastapi>=0.110",
-  "uvicorn[standard]>=0.29",
-]
+asgi = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
 jev = [
   "typesafe-sdk>=0.7.1,<1",
 ]
 dev = [
-  "detect-secrets==1.5.0",
-  "pre-commit==4.5.0",
-  "pytest>=9.0",
-  "ruff==0.14.8",
+    "detect-secrets==1.5.0",
+    "fastapi>=0.110",
+    "httpx>=0.27",
+    "langfuse>=3.0",
+    "pre-commit==4.5.0",
+    "pytest>=9.0",
+    "requests>=2.32",
+    "ruff==0.14.8",
+    "isort>=8.0.1",
 ]
 
 [build-system]
@@ -53,3 +57,21 @@ include = ["sysml_backend*"]
 
 [tool.setuptools.package-data]
 sysml_backend = ["static/*", "static/assets/*"]
+
+[tool.isort]
+profile = "black"
+known_first_party = ["sysml_backend"]
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+
+[tool.pytest.ini_options]
+testpaths = [
+    "src/backend/sysml-backend/tests",
+    "src/eval-helpers/langfuse-importer/tests",
+]
+pythonpath = [
+    "src/backend/sysml-backend",
+    "src/eval-helpers/langfuse-importer",
+]

@@ -135,22 +135,29 @@ button:disabled {
 }
 
 .diagram-region {
+  display: flex;
+  flex-direction: column;
   position: relative;
   min-width: 0;
+  min-height: 0;
   border-right: 1px solid #d6e0e2;
 }
 
 .diagram-status {
-  position: absolute;
-  z-index: 5;
-  top: 14px;
-  left: 14px;
-  right: 14px;
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+  padding: 14px;
   pointer-events: none;
+}
+
+.diagram-region .react-flow {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .viewer-selectors,
@@ -670,12 +677,15 @@ button:disabled {
 
 .validation-review-panel {
   width: min(360px, calc(100vw - 48px));
+  max-height: calc(100% - 28px);
+  overflow: auto;
   border: 1px solid #e2c9aa;
   border-radius: 7px;
   padding: 10px 12px;
   background: rgba(255, 250, 244, 0.96);
   color: #4f3822;
   box-shadow: 0 12px 30px rgba(77, 55, 25, 0.12);
+  z-index: 5;
 }
 
 .validation-review-panel__header {
@@ -2050,7 +2060,54 @@ button:disabled {
 
 .project-actions--top {
   justify-content: flex-start;
+  flex-wrap: wrap;
   padding-bottom: 2px;
+}
+
+.scan-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid #cbd8da;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fbfcfc;
+  box-shadow: 0 1px 1px rgba(18, 41, 46, 0.04);
+}
+
+.scan-options__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #172326;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.scan-options__toggle input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+.scan-options__toggle span {
+  min-width: 0;
+}
+
+.scan-options__scan {
+  flex: 0 0 auto;
+}
+
+.checkbox-control--inline {
+  margin-right: 4px;
 }
 
 .checkbox-control {
@@ -2625,6 +2682,20 @@ button:disabled {
 
   .tool-button span {
     display: none;
+  }
+
+  .scan-options {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scan-options__scan {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .scan-options__toggle span {
+    display: inline;
   }
 
   .statusbar {

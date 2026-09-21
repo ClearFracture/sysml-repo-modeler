@@ -29,6 +29,7 @@ class BackendConfig:
     jev_model: str = "jev-1.13.0"
     jev_confidence_threshold: float = 0.8
     jev_timeout_seconds: float = 30.0
+    telemetry_export_root: Path | None = None
 
 
 def load_config() -> BackendConfig:
@@ -77,7 +78,18 @@ def load_config() -> BackendConfig:
             os.environ.get("JEV_CONFIDENCE_THRESHOLD", "0.80")
         ),
         jev_timeout_seconds=float(os.environ.get("JEV_TIMEOUT_SECONDS", "30")),
+        telemetry_export_root=_telemetry_export_root(base),
     )
+
+
+def _telemetry_export_root(base: Path | None) -> Path | None:
+    override = os.environ.get("TELEMETRY_EXPORT_ROOT")
+    if override is not None:
+        trimmed = override.strip()
+        return Path(trimmed) if trimmed else None
+    if base is not None:
+        return base / "telemetry" / "scans"
+    return Path("telemetry") / "scans"
 
 
 def _static_assets_path(package_root: Path) -> Path:

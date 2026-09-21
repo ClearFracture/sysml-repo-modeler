@@ -5,13 +5,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from sysml_backend.services.monitoring import (  # noqa: E402
+    MonitoringService,
+    MonitorInProgressError,
+)
 from sysml_backend.services.projects import ProjectRegistry  # noqa: E402
 from sysml_backend.services.repository_importer import (  # noqa: E402
     RepositoryImportResult,
     _repo_target,
     _store_path,
 )
-from sysml_backend.services.monitoring import MonitoringService, MonitorInProgressError  # noqa: E402
 from sysml_backend.services.storage import ScopedDocumentStore  # noqa: E402
 from sysml_backend.services.workspace import (  # noqa: E402
     WorkspaceManager,

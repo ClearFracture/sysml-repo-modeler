@@ -13,9 +13,11 @@ from ..services import (
     OpenCodeClient,
     OpenCodeConfig,
     PackageRegistry,
-    ProjectWorkspaceService,
     ProjectRegistry,
+    ProjectWorkspaceService,
     RunEventStore,
+    ScanTelemetryExporter,
+    ScanTelemetryStore,
     WorkspaceManager,
     create_document_store,
 )
@@ -83,6 +85,14 @@ def build_services(config: BackendConfig) -> Services:
         config.opencode_workspace_root,
         analysis_store,
         architecture_classifier,
+        telemetry_exporter=ScanTelemetryExporter(
+            config.telemetry_export_root,
+            opencode_client,
+            opencode_provider_id=config.opencode_provider_id,
+            opencode_model_id=config.opencode_model_id,
+            opencode_agent=config.opencode_agent,
+        ),
+        telemetry_store=ScanTelemetryStore(config.telemetry_export_root),
     )
     return Services(
         package_registry=package_registry,

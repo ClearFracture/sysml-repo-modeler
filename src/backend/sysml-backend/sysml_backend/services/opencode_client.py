@@ -11,13 +11,14 @@ from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from .architecture import llm_architecture_prompt
+from .opencode_transcript import message_role
 from .sysml_prompts import (
     analysis_prompt,
     coverage_repair_prompt,
     enrichment_prompt,
     repair_prompt,
 )
-from .architecture import llm_architecture_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ class OpenCodeAnalysisResult:
     session_id: str | None
     sysml_content: str | None
     tool_errors: list[dict[str, str]]
+    provider_error: dict[str, Any] | None = None
 
 
 class OpenCodeProtocolError(Exception):
@@ -244,8 +246,23 @@ class OpenCodeClient:
             _emit_tool_errors(map_errors, on_oc_event)
             system_map = _extract_sysml_content(map_response)
             if not system_map:
-                logger.warning("[opencode] pass 1 produced no SysML; nothing to enrich")
-                return OpenCodeAnalysisResult(session_id, None, tool_errors)
+                provider_error = _extract_provider_error(map_response)
+                if provider_error:
+                    logger.warning(
+                        "[opencode] pass 1 failed: %s",
+                        provider_error["message"],
+                    )
+                    if on_oc_event:
+                        on_oc_event(
+                            "opencode_provider_error", provider_error["message"]
+                        )
+                else:
+                    logger.warning(
+                        "[opencode] pass 1 produced no SysML; nothing to enrich"
+                    )
+                return OpenCodeAnalysisResult(
+                    session_id, None, tool_errors, provider_error
+                )
             logger.info("[opencode] pass 1 architecture: %d chars", len(system_map))
             self._post_completion_marker(session_id)
 
@@ -267,6 +284,17 @@ class OpenCodeClient:
                     "[opencode] pass 2 documented model: %d chars", len(enriched)
                 )
                 return OpenCodeAnalysisResult(session_id, enriched, tool_errors)
+            provider_error = _extract_provider_error(enrich_response)
+            if provider_error:
+                logger.warning(
+                    "[opencode] pass 2 failed: %s",
+                    provider_error["message"],
+                )
+                if on_oc_event:
+                    on_oc_event("opencode_provider_error", provider_error["message"])
+                return OpenCodeAnalysisResult(
+                    session_id, system_map, tool_errors, provider_error
+                )
             logger.warning(
                 "[opencode] pass 2 produced no SysML; falling back to pass 1 model"
             )
@@ -446,11 +474,52 @@ class OpenCodeClient:
             if isinstance(response, list):
                 return response
             if isinstance(response, dict):
-                items = response.get("items", [])
-                return items if isinstance(items, list) else []
+                items = response.get("items")
+                if isinstance(items, list):
+                    return items
+                if response.get("info"):
+                    return [response]
         except (HTTPError, URLError, TimeoutError, OpenCodeProtocolError):
             pass
         return []
+
+    def get_session_message(
+        self, session_id: str, message_id: str
+    ) -> dict[str, Any] | None:
+        if not self.config.base_url or not message_id:
+            return None
+        try:
+            response = self._request_any(
+                "GET",
+                f"/session/{session_id}/message/{message_id}",
+                None,
+            )
+            if isinstance(response, dict) and response.get("info"):
+                return response
+        except (HTTPError, URLError, TimeoutError, OpenCodeProtocolError):
+            pass
+        return None
+
+    def get_session_transcript(self, session_id: str) -> list[dict[str, Any]]:
+        from .opencode_transcript import normalize_opencode_message
+
+        transcript: list[dict[str, Any]] = []
+        for raw in self.get_session_messages(session_id):
+            if not isinstance(raw, dict):
+                continue
+            message = raw
+            info = message.get("info")
+            info = info if isinstance(info, dict) else {}
+            message_id = info.get("id")
+            parts = message.get("parts")
+            if message_id and (not isinstance(parts, list) or not parts):
+                detail = self.get_session_message(session_id, str(message_id))
+                if detail:
+                    message = detail
+            normalized = normalize_opencode_message(message)
+            if normalized is not None:
+                transcript.append(normalized)
+        return transcript
 
     def _create_session(self, run_id: str) -> dict[str, Any]:
         body: dict[str, Any] = {"title": f"SYSML {run_id[:8]}"}
@@ -769,6 +838,65 @@ def _extract_tool_errors(response: Any, pass_name: str) -> list[dict[str, str]]:
     return errors
 
 
+def _extract_provider_error(response: Any) -> dict[str, Any] | None:
+    """Return a safe, user-facing provider error from an OpenCode response."""
+    for event in _response_events(response):
+        info = event.get("info")
+        info = info if isinstance(info, dict) else event
+        error = info.get("error")
+        if not isinstance(error, dict):
+            continue
+        data = error.get("data")
+        data = data if isinstance(data, dict) else {}
+        message = str(data.get("message") or error.get("message") or "").strip()
+        status_code = data.get("statusCode")
+        code = _provider_error_code(data)
+        provider = str(info.get("providerID") or "").strip() or "model provider"
+
+        if code in {"credit_balance_exhausted", "insufficient_quota"} or (
+            status_code == 429
+            and any(term in message.lower() for term in ("no credits", "quota"))
+        ):
+            return {
+                "code": "credit_balance_exhausted",
+                "statusCode": 429,
+                "provider": provider,
+                "message": (
+                    f"{provider_display_name(provider)} API credits are exhausted. "
+                    "Add credits or configure a provider account with available quota."
+                ),
+            }
+
+        return {
+            "code": code or str(error.get("name") or "provider_error"),
+            "statusCode": status_code if isinstance(status_code, int) else None,
+            "provider": provider,
+            "message": message or f"{provider_display_name(provider)} request failed.",
+        }
+    return None
+
+
+def _provider_error_code(data: dict[str, Any]) -> str | None:
+    response_body = data.get("responseBody")
+    if isinstance(response_body, str):
+        try:
+            payload = json.loads(response_body)
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict):
+            nested = payload.get("error")
+            if isinstance(nested, dict):
+                code = nested.get("code") or nested.get("type")
+                if isinstance(code, str) and code:
+                    return code
+    code = data.get("code")
+    return code if isinstance(code, str) and code else None
+
+
+def provider_display_name(provider: str) -> str:
+    return {"openai": "OpenAI"}.get(provider.lower(), provider)
+
+
 def _response_events(response: Any) -> list[dict[str, Any]]:
     if isinstance(response, list):
         return [event for event in response if isinstance(event, dict)]
@@ -783,17 +911,17 @@ def _response_events(response: Any) -> list[dict[str, Any]]:
 def _extract_assistant_messages(response: Any) -> list[str]:
     messages: list[str] = []
     for event in _response_events(response):
-        role_or_type = event.get("type") or event.get("role") or ""
-        if role_or_type != "assistant":
+        if message_role(event) != "assistant":
             continue
         text = _message_text(event)
         if text:
             messages.append(text)
 
     if not messages and isinstance(response, dict) and "parts" in response:
-        text = _message_text(response)
-        if text:
-            messages.append(text)
+        if message_role(response) == "assistant" or response.get("parts"):
+            text = _message_text(response)
+            if text:
+                messages.append(text)
 
     return messages
 

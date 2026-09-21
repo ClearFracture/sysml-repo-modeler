@@ -7,26 +7,28 @@ from pathlib import Path
 # without an editable install.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sysml_backend.utils.env import _parse_env_line  # noqa: E402
-from sysml_backend.utils.mapping import pick  # noqa: E402
-from sysml_backend.services.opencode_client import (  # noqa: E402
-    _extract_json_payload,
-    _extract_sysml_content,
-)
-from sysml_backend.services.evidence import _scan_file  # noqa: E402
 from sysml_backend.services.architecture import (  # noqa: E402
     ArchitectureClassifier,
     ArchitectureClassifierConfig,
     apply_llm_architecture_decisions,
     finalize_architecture,
 )
-from sysml_backend.services.workspace import slugify  # noqa: E402
+from sysml_backend.services.evidence import _scan_file  # noqa: E402
+from sysml_backend.services.opencode_client import (  # noqa: E402
+    OpenCodeClient,
+    OpenCodeConfig,
+    _extract_json_payload,
+    _extract_provider_error,
+    _extract_sysml_content,
+)
 from sysml_backend.services.repository_importer import (  # noqa: E402
     _name_from_url,
     _role_directory,
     _safe_name,
 )
-
+from sysml_backend.services.workspace import slugify  # noqa: E402
+from sysml_backend.utils.env import _parse_env_line  # noqa: E402
+from sysml_backend.utils.mapping import pick  # noqa: E402
 
 # ---- env parsing -----------------------------------------------------------
 
@@ -246,7 +248,7 @@ def test_evidence_preserves_names_for_multiple_database_dependencies(tmp_path):
         "BACKEND_LISTEN_HOST=0.0.0.0\n",
         encoding="utf-8",
     )
-    records = _scan_file("orders-api", tmp_path, env_file)
+    records = _scan_file("orders-api", "application", tmp_path, env_file)
     assert {record["name"] for record in records} == {
         "ORDERS_DATABASE_URL",
         "AUDIT_DATABASE_URL",
@@ -288,3 +290,70 @@ def test_service_endpoint_dependency_links_registered_repositories():
     assert inventory["dependencies"][0]["targetComponentKey"] == (
         "component:payments_api"
     )
+
+
+def test_extract_provider_credit_error_without_exposing_response_headers():
+    response = _provider_credit_error()
+
+    error = _extract_provider_error(response)
+
+    assert error == {
+        "code": "credit_balance_exhausted",
+        "statusCode": 429,
+        "provider": "openai",
+        "message": (
+            "OpenAI API credits are exhausted. Add credits or configure a "
+            "provider account with available quota."
+        ),
+    }
+
+
+def test_run_analysis_reports_provider_error_during_enrichment(monkeypatch):
+    client = OpenCodeClient(OpenCodeConfig(base_url="http://opencode.test"))
+    architecture = _assistant("package P { part def A { } }")
+    responses = iter([architecture, _provider_credit_error()])
+    emitted_events: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(client, "_create_session", lambda run_id: {"id": "session-1"})
+    monkeypatch.setattr(
+        client,
+        "_send_prompt_streaming",
+        lambda *args, **kwargs: next(responses),
+    )
+    monkeypatch.setattr(client, "_post_completion_marker", lambda session_id: None)
+
+    result = client.run_analysis(
+        "run-1",
+        {"repositories": []},
+        on_oc_event=lambda phase, message: emitted_events.append((phase, message)),
+    )
+
+    assert result.sysml_content == "package P { part def A { } }"
+    assert result.provider_error is not None
+    assert result.provider_error["code"] == "credit_balance_exhausted"
+    assert (
+        "opencode_provider_error",
+        result.provider_error["message"],
+    ) in emitted_events
+
+
+def _provider_credit_error() -> dict:
+    return {
+        "info": {
+            "role": "assistant",
+            "providerID": "openai",
+            "error": {
+                "name": "APIError",
+                "data": {
+                    "message": "You have no credits remaining.",
+                    "statusCode": 429,
+                    "responseHeaders": {"set-cookie": "secret"},
+                    "responseBody": (
+                        '{"error":{"type":"insufficient_quota",'
+                        '"code":"credit_balance_exhausted"}}'
+                    ),
+                },
+            },
+        },
+        "parts": [],
+    }

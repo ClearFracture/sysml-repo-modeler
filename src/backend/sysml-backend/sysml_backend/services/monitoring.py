@@ -22,6 +22,11 @@ from .opencode_client import OpenCodeClient
 from .packages import PackageRegistry
 from .run_events import RunEventStore
 from .sysml_validation import SysmlValidationResult, validate_sysml_model
+from .telemetry_export import (
+    ScanTelemetryExporter,
+    ScanTelemetryStore,
+    TelemetryExportResult,
+)
 from .workspace import WorkspaceManager, slugify, to_rel
 
 logger = logging.getLogger(__name__)
@@ -58,6 +63,10 @@ class MonitoringCycle:
     architecture: dict[str, Any]
     opencode_session_id: str | None = None
     opencode_usage: dict[str, Any] | None = None
+    telemetry_enabled: bool = False
+    telemetry_export_path: str | None = None
+    telemetry_export_status: str | None = None
+    telemetry_exported_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +77,7 @@ class _QueuedMonitoringCycle:
     slug: str
     trigger: str
     subject_kind: str
+    telemetry_enabled: bool = False
 
 
 class MonitoringService:
@@ -80,6 +90,8 @@ class MonitoringService:
         opencode_workspace_root: str,
         analysis_store: AnalysisStore,
         architecture_classifier: ArchitectureClassifier,
+        telemetry_exporter: ScanTelemetryExporter | None = None,
+        telemetry_store: ScanTelemetryStore | None = None,
     ) -> None:
         self.workspaces = workspaces
         self.package_registry = package_registry
@@ -88,6 +100,8 @@ class MonitoringService:
         self.opencode_workspace_root = opencode_workspace_root.rstrip("/")
         self.analysis_store = analysis_store
         self.architecture_classifier = architecture_classifier
+        self.telemetry_exporter = telemetry_exporter
+        self.telemetry_store = telemetry_store
         self._inflight: set[str] = set()
         self._queue_lock = threading.Lock()
         self._queued_slugs: set[str] = set()
@@ -106,7 +120,11 @@ class MonitoringService:
     # ---- Public synchronous API (kept for backward compatibility) ------------
 
     def start_cycle(
-        self, package_name: str, trigger: str = "manual"
+        self,
+        package_name: str,
+        trigger: str = "manual",
+        *,
+        telemetry_enabled: bool = False,
     ) -> MonitoringCycle:
         package = self.package_registry.get_package(package_name)
         if package is None:
@@ -117,21 +135,37 @@ class MonitoringService:
             slugify(package_name),
             trigger,
             subject_kind="package",
+            telemetry_enabled=telemetry_enabled,
         )
 
     def start_project_cycle(
-        self, project: dict[str, Any], trigger: str = "manual"
+        self,
+        project: dict[str, Any],
+        trigger: str = "manual",
+        *,
+        telemetry_enabled: bool = False,
     ) -> MonitoringCycle:
         project_name = str(project.get("name") or project.get("slug") or "project")
         slug = str(project.get("slug") or slugify(project_name))
         package = _project_to_package(project)
         return self._start_cycle(
-            package, project_name, slug, trigger, subject_kind="project"
+            package,
+            project_name,
+            slug,
+            trigger,
+            subject_kind="project",
+            telemetry_enabled=telemetry_enabled,
         )
 
     # ---- Public async API (returns run_id immediately, cycle runs in background)
 
-    def start_cycle_async(self, package_name: str, trigger: str = "manual") -> str:
+    def start_cycle_async(
+        self,
+        package_name: str,
+        trigger: str = "manual",
+        *,
+        telemetry_enabled: bool = False,
+    ) -> str:
         package = self.package_registry.get_package(package_name)
         if package is None:
             raise ValueError(f"Package '{package_name}' is not registered.")
@@ -141,16 +175,26 @@ class MonitoringService:
             slugify(package_name),
             trigger,
             subject_kind="package",
+            telemetry_enabled=telemetry_enabled,
         )
 
     def start_project_cycle_async(
-        self, project: dict[str, Any], trigger: str = "manual"
+        self,
+        project: dict[str, Any],
+        trigger: str = "manual",
+        *,
+        telemetry_enabled: bool = False,
     ) -> str:
         project_name = str(project.get("name") or project.get("slug") or "project")
         slug = str(project.get("slug") or slugify(project_name))
         package = _project_to_package(project)
         return self._start_cycle_async(
-            package, project_name, slug, trigger, subject_kind="project"
+            package,
+            project_name,
+            slug,
+            trigger,
+            subject_kind="project",
+            telemetry_enabled=telemetry_enabled,
         )
 
     def get_run_status(self, run_id: str) -> str | None:
@@ -163,6 +207,39 @@ class MonitoringService:
                 rid for rid, s in self._run_status.items() if s in {"queued", "running"}
             ]
 
+    def list_telemetry_runs(self) -> list[dict[str, Any]]:
+        if self.telemetry_store is None:
+            return []
+        return self.telemetry_store.list_runs(self.analysis_store.list_runs())
+
+    def get_telemetry_manifest(self, run_id: str) -> dict[str, Any] | None:
+        if self.telemetry_store is None:
+            return None
+        return self.telemetry_store.read_manifest(run_id)
+
+    def read_telemetry_file(
+        self, run_id: str, relative_path: str
+    ) -> tuple[bytes, str] | None:
+        if self.telemetry_store is None:
+            return None
+        return self.telemetry_store.read_file(run_id, relative_path)
+
+    def read_telemetry_bundle(self, run_id: str) -> bytes | None:
+        if self.telemetry_store is None:
+            return None
+        return self.telemetry_store.create_bundle_archive(run_id)
+
+    def delete_project_telemetry(self, project_slug: str) -> int:
+        """Delete filesystem telemetry bundles for all runs belonging to a project."""
+        if self.telemetry_store is None:
+            return 0
+        runs = self.analysis_store.list_runs(project_slug)
+        run_ids = [
+            str(run.get("runId") or run.get("run_id") or "").strip() for run in runs
+        ]
+        run_ids = [run_id for run_id in run_ids if run_id]
+        return self.telemetry_store.delete_runs(run_ids)
+
     # ---- Internal helpers ---------------------------------------------------
 
     def _start_cycle(
@@ -173,6 +250,7 @@ class MonitoringService:
         trigger: str,
         *,
         subject_kind: str,
+        telemetry_enabled: bool = False,
     ) -> MonitoringCycle:
         if not self._claim(slug):
             raise MonitorInProgressError(package_name)
@@ -187,6 +265,7 @@ class MonitoringService:
                 trigger,
                 subject_kind=subject_kind,
                 run_id=run_id,
+                telemetry_enabled=telemetry_enabled,
             )
             with self._status_lock:
                 self._run_status[run_id] = cycle.status
@@ -206,6 +285,7 @@ class MonitoringService:
         trigger: str,
         *,
         subject_kind: str,
+        telemetry_enabled: bool = False,
     ) -> str:
         run_id = uuid4().hex
         queued = _QueuedMonitoringCycle(
@@ -215,6 +295,7 @@ class MonitoringService:
             slug=slug,
             trigger=trigger,
             subject_kind=subject_kind,
+            telemetry_enabled=telemetry_enabled,
         )
         with self._queue_lock:
             if slug in self._inflight or slug in self._queued_slugs:
@@ -272,6 +353,7 @@ class MonitoringService:
                     queued.trigger,
                     subject_kind=queued.subject_kind,
                     run_id=queued.run_id,
+                    telemetry_enabled=queued.telemetry_enabled,
                 )
                 with self._status_lock:
                     self._run_status[queued.run_id] = cycle.status
@@ -302,6 +384,7 @@ class MonitoringService:
         *,
         subject_kind: str,
         run_id: str | None = None,
+        telemetry_enabled: bool = False,
     ) -> MonitoringCycle:
         workspace = self.workspaces.workspace(slug)
         artifact_writer = ArtifactWriter(workspace.root)
@@ -452,6 +535,7 @@ class MonitoringService:
         opencode_session_id = opencode_result.session_id
         sysml_content = opencode_result.sysml_content
         tool_errors = list(opencode_result.tool_errors)
+        provider_error = opencode_result.provider_error
         self._flush_opencode_buffers(slug, run_id, package_name)
         sysml_content, validation, tool_errors = self._validate_and_repair_sysml(
             slug=slug,
@@ -463,6 +547,7 @@ class MonitoringService:
             session_id=opencode_session_id,
             sysml_content=sysml_content,
             tool_errors=tool_errors,
+            provider_error=provider_error,
             on_oc_event=on_oc_event,
         )
 
@@ -475,13 +560,25 @@ class MonitoringService:
                 architecture=architecture,
             )
             artifact_sets.append(synthesis_artifact)
+            synthesis_level = "warn" if provider_error else "info"
+            synthesis_message = (
+                (
+                    "OpenCode SysMLv2 enrichment stopped after a provider error; "
+                    f"retained the partial pass 1 model ({len(sysml_content)} chars)."
+                )
+                if provider_error
+                else f"OpenCode SysMLv2 synthesis complete ({len(sysml_content)} chars)."
+            )
             self.event_store.append(
                 slug,
                 run_id,
                 "opencode",
-                "info",
-                f"OpenCode SysMLv2 synthesis complete ({len(sysml_content)} chars).",
+                synthesis_level,
+                synthesis_message,
                 entity=package_name,
+                reasoning_summary=(
+                    json.dumps({"error": provider_error}) if provider_error else None
+                ),
                 evidence_refs=[
                     synthesis_artifact.suite_model_path,
                     synthesis_artifact.suite_evidence_path,
@@ -489,7 +586,20 @@ class MonitoringService:
                 ],
             )
         else:
-            if opencode_session_id:
+            if provider_error:
+                fallback_message = (
+                    f"{provider_error['message']} Writing repository-metadata fallback."
+                )
+                self.event_store.append(
+                    slug,
+                    run_id,
+                    "opencode",
+                    "warn",
+                    fallback_message,
+                    entity=package_name,
+                    reasoning_summary=json.dumps({"error": provider_error}),
+                )
+            elif opencode_session_id:
                 self.event_store.append(
                     slug,
                     run_id,
@@ -536,6 +646,47 @@ class MonitoringService:
 
         completed_at = _now()
         opencode_usage = self.opencode_client.get_session_usage(opencode_session_id)
+        telemetry_export_path = None
+        telemetry_export_status = None
+        telemetry_exported_at = None
+        if telemetry_enabled:
+            export_result = self._export_scan_telemetry(
+                run_id=run_id,
+                project_slug=slug,
+                project_name=package_name,
+                trigger=trigger,
+                status=validation.status,
+                started_at=started_at,
+                completed_at=completed_at,
+                repository_count=len(repositories),
+                repositories=[
+                    _repository_change(repository) for repository in repositories
+                ],
+                opencode_session_id=opencode_session_id,
+                opencode_usage=opencode_usage,
+                validation=validation,
+                tool_errors=tool_errors,
+                artifacts=artifact_sets,
+            )
+            telemetry_export_path = export_result.export_path
+            telemetry_export_status = export_result.status
+            telemetry_exported_at = export_result.exported_at
+            self.event_store.append(
+                slug,
+                run_id,
+                "telemetry_export",
+                "info" if export_result.status == "completed" else "warn",
+                export_result.message
+                or f"Scan telemetry export {export_result.status}.",
+                entity=package_name,
+                reasoning_summary=json.dumps(
+                    {
+                        "telemetryEnabled": True,
+                        "exportPath": telemetry_export_path,
+                        "exportStatus": telemetry_export_status,
+                    }
+                ),
+            )
         cycle = MonitoringCycle(
             run_id=run_id,
             package_name=package_name,
@@ -553,6 +704,10 @@ class MonitoringService:
             architecture=architecture,
             opencode_session_id=opencode_session_id,
             opencode_usage=opencode_usage,
+            telemetry_enabled=telemetry_enabled,
+            telemetry_export_path=telemetry_export_path,
+            telemetry_export_status=telemetry_export_status,
+            telemetry_exported_at=telemetry_exported_at,
         )
         self._append_cycle(slug, cycle)
         self.event_store.append(
@@ -565,6 +720,48 @@ class MonitoringService:
         )
         return cycle
 
+    def _export_scan_telemetry(
+        self,
+        *,
+        run_id: str,
+        project_slug: str,
+        project_name: str,
+        trigger: str,
+        status: str,
+        started_at: str,
+        completed_at: str,
+        repository_count: int,
+        repositories: list[dict[str, Any]],
+        opencode_session_id: str | None,
+        opencode_usage: dict[str, Any] | None,
+        validation: SysmlValidationResult,
+        tool_errors: list[dict[str, str]],
+        artifacts: list[ArtifactSet],
+    ) -> TelemetryExportResult:
+        if self.telemetry_exporter is None:
+            return TelemetryExportResult(
+                status="unconfigured",
+                message="Telemetry export is not configured.",
+            )
+        events = self.event_store.list_events(run_id)
+        return self.telemetry_exporter.export_scan(
+            run_id=run_id,
+            project_slug=project_slug,
+            project_name=project_name,
+            trigger=trigger,
+            status=status,
+            started_at=started_at,
+            completed_at=completed_at,
+            repository_count=repository_count,
+            repositories=repositories,
+            opencode_session_id=opencode_session_id,
+            opencode_usage=opencode_usage,
+            validation=validation,
+            tool_errors=tool_errors,
+            events=events,
+            artifacts=artifacts,
+        )
+
     def _make_opencode_event_callback(
         self, slug: str, run_id: str, entity: str
     ) -> Callable[[str, str], None]:
@@ -575,12 +772,20 @@ class MonitoringService:
         """
 
         def _on_oc_event(phase: str, message: str) -> None:
-            if phase in {"opencode_pass", "opencode_tool_error"}:
+            if phase in {
+                "opencode_pass",
+                "opencode_tool_error",
+                "opencode_provider_error",
+            }:
                 self.event_store.append(
                     slug,
                     run_id,
                     phase,
-                    "warn" if phase == "opencode_tool_error" else "info",
+                    (
+                        "warn"
+                        if phase in {"opencode_tool_error", "opencode_provider_error"}
+                        else "info"
+                    ),
                     message,
                     entity=entity,
                 )
@@ -623,6 +828,7 @@ class MonitoringService:
         session_id: str | None,
         sysml_content: str | None,
         tool_errors: list[dict[str, str]],
+        provider_error: dict[str, Any] | None,
         on_oc_event: Callable[[str, str], None],
     ) -> tuple[str | None, SysmlValidationResult, list[dict[str, str]]]:
         validation = validate_sysml_model(
@@ -630,6 +836,7 @@ class MonitoringService:
             repository_count=repository_count,
             tool_errors=tool_errors,
             evidence=evidence,
+            provider_error=provider_error,
         )
         self._append_validation_event(slug, run_id, package_name, validation)
 
