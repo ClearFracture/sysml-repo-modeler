@@ -23,7 +23,7 @@ COPY alembic.ini ./
 COPY src/backend/sysml-backend/alembic ./src/backend/sysml-backend/alembic
 COPY src/backend/sysml-backend/sysml_backend ./src/backend/sysml-backend/sysml_backend
 COPY --from=ui-builder /ui/dist ./src/backend/sysml-backend/sysml_backend/static
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[jev]"
 
 EXPOSE 8765
 

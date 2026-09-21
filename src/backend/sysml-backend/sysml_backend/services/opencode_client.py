@@ -17,6 +17,7 @@ from .sysml_prompts import (
     enrichment_prompt,
     repair_prompt,
 )
+from .architecture import llm_architecture_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,70 @@ class OpenCodeClient:
             return {"status": "timeout", "message": "OpenCode request timed out."}
         except OpenCodeProtocolError as error:
             return {"status": "error", "message": str(error)}
+
+    def resolve_architecture_classifications(
+        self,
+        run_id: str,
+        inventory: dict[str, Any],
+        *,
+        on_oc_event: Callable[[str, str], None] | None = None,
+    ) -> dict[str, Any]:
+        """Resolve low-confidence Jev decisions with the configured LLM."""
+
+        unresolved = inventory.get("unresolved", [])
+        if not isinstance(unresolved, list) or not unresolved:
+            return {"status": "not_needed", "decisions": []}
+        if not self.config.base_url:
+            return {
+                "status": "unconfigured",
+                "decisions": [],
+                "error": "OPENCODE_BASE_URL is not configured.",
+            }
+        try:
+            session = self._create_session(f"architecture-{run_id}")
+            session_id = str(session.get("id") or "")
+            if not session_id:
+                raise OpenCodeProtocolError(
+                    "OpenCode did not return a session id for architecture fallback."
+                )
+            response = self._send_prompt_streaming(
+                session_id,
+                llm_architecture_prompt(inventory),
+                on_oc_event=on_oc_event,
+            )
+            payload = _extract_json_payload(response)
+            decisions = payload.get("decisions", [])
+            if not isinstance(decisions, list):
+                raise OpenCodeProtocolError(
+                    "OpenCode architecture fallback did not return a decisions list."
+                )
+            return {
+                "status": "completed",
+                "sessionId": session_id,
+                "decisions": [item for item in decisions if isinstance(item, dict)],
+                "usage": self.get_session_usage(session_id),
+            }
+        except HTTPError as error:
+            body = error.read().decode("utf-8", errors="replace")
+            return {
+                "status": "error",
+                "decisions": [],
+                "error": _opencode_error_message(error.code, body),
+            }
+        except URLError as error:
+            return {
+                "status": "unreachable",
+                "decisions": [],
+                "error": f"OpenCode is unreachable: {error.reason}",
+            }
+        except TimeoutError:
+            return {
+                "status": "timeout",
+                "decisions": [],
+                "error": "OpenCode architecture fallback timed out.",
+            }
+        except OpenCodeProtocolError as error:
+            return {"status": "error", "decisions": [], "error": str(error)}
 
     def run_analysis(
         self,
@@ -606,6 +671,33 @@ def _extract_sysml_content(response: Any) -> str | None:
         "[opencode] no SysML pattern matched — text starts with: %r", text[:100]
     )
     return None
+
+
+def _extract_json_payload(response: Any) -> dict[str, Any]:
+    messages = _extract_assistant_messages(response)
+    if not messages:
+        raise OpenCodeProtocolError(
+            "OpenCode architecture fallback returned no assistant message."
+        )
+    text = "\n".join(messages).strip()
+    fenced = re.search(r"```(?:json)?\s*\n(.*?)```", text, re.DOTALL | re.I)
+    candidate = fenced.group(1).strip() if fenced else text
+    if not candidate.startswith("{"):
+        start = candidate.find("{")
+        end = candidate.rfind("}")
+        if start >= 0 and end > start:
+            candidate = candidate[start : end + 1]
+    try:
+        payload = json.loads(candidate)
+    except json.JSONDecodeError as error:
+        raise OpenCodeProtocolError(
+            "OpenCode architecture fallback returned invalid JSON."
+        ) from error
+    if not isinstance(payload, dict):
+        raise OpenCodeProtocolError(
+            "OpenCode architecture fallback returned a non-object JSON value."
+        )
+    return payload
 
 
 def _debug_response_structure(response: Any) -> None:

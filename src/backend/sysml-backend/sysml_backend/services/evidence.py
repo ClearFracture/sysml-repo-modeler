@@ -66,7 +66,7 @@ _SIGNALS: list[tuple[str, str, re.Pattern[str]]] = [
         "database",
         "postgresql",
         re.compile(
-            r"\b(POSTGRES|POSTGRESQL|PGHOST|PGPORT|DATABASE_URL|JDBC_DATABASE_URL)\b",
+            r"\b((?:[A-Z0-9]+_)*(?:DATABASE_URL|JDBC_DATABASE_URL)|POSTGRES|POSTGRESQL|PGHOST|PGPORT)\b",
             re.I,
         ),
     ),
@@ -78,10 +78,17 @@ _SIGNALS: list[tuple[str, str, re.Pattern[str]]] = [
     (
         "messaging",
         "rabbitmq",
-        re.compile(r"\b(RABBITMQ|AMQP|AMQPS|CELERY_BROKER|MESSAGE_BROKER)\b", re.I),
+        re.compile(
+            r"\b((?:[A-Z0-9]+_)*(?:AMQP|AMQPS|CELERY_BROKER|MESSAGE_BROKER)|RABBITMQ)\b",
+            re.I,
+        ),
     ),
     ("messaging", "kafka", re.compile(r"\b(KAFKA|BOOTSTRAP_SERVERS)\b", re.I)),
-    ("cache", "redis", re.compile(r"\b(REDIS|REDIS_URL|CACHE_URL)\b", re.I)),
+    (
+        "cache",
+        "redis",
+        re.compile(r"\b((?:[A-Z0-9]+_)*(?:REDIS_URL|CACHE_URL)|REDIS)\b", re.I),
+    ),
     ("cache", "memcached", re.compile(r"\b(MEMCACHED|MEMCACHE)\b", re.I)),
     (
         "search",
@@ -139,6 +146,13 @@ _SIGNALS: list[tuple[str, str, re.Pattern[str]]] = [
             r"\b(SHAREPOINT|MICROSOFT_TEAMS|TEAMS_WEBHOOK|SLACK_WEBHOOK)\b", re.I
         ),
     ),
+    (
+        "service",
+        "service_endpoint",
+        re.compile(
+            r"\b([A-Z][A-Z0-9_]*(?:_BASE_URL|_SERVICE_URL|_API_URL|_ENDPOINT|_HOST))\b"
+        ),
+    ),
 ]
 
 _CATEGORY_LABELS = {
@@ -153,6 +167,7 @@ _CATEGORY_LABELS = {
     "observability": "observability",
     "port": "network port",
     "search": "search service",
+    "service": "application service dependency",
     "secret": "secrets",  # pragma: allowlist secret
     "storage": "storage",
     "vector": "vector store",

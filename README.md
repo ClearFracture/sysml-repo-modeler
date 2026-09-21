@@ -130,24 +130,50 @@ variable you must set is `OPENAI_API_KEY`; the rest have working defaults.
 
 <br />
 
-| Variable                                                | Required | Default                 | Purpose                                                          |
-| ------------------------------------------------------- | :------: | ----------------------- | ---------------------------------------------------------------- |
-| `OPENAI_API_KEY`                                        |    ✅    | _blank_                 | Provider key used by the OpenCode runtime                        |
-| `DATABASE_URL`                                          |    ✅    | _blank_                 | Postgres connection string (set by Docker Compose automatically) |
-| `OPENCODE_BASE_URL`                                     |    —     | `http://127.0.0.1:4096` | OpenCode server URL; leave blank to disable analysis             |
-| `OPENCODE_WORKSPACE_ROOT`                               |    —     | `/workspace/projects`   | Path OpenCode sees for project folders                           |
-| `OPENCODE_SERVER_USERNAME` / `OPENCODE_SERVER_PASSWORD` |    —     | `opencode` / _blank_    | OpenCode Basic auth credentials                                  |
-| `OPENCODE_PROVIDER_ID` / `OPENCODE_MODEL_ID`            |    —     | `openai` / `gpt-5.5`    | OpenCode provider and model                                      |
-| `OPENCODE_TIMEOUT_SECONDS`                              |    —     | `600`                   | Per-run OpenCode timeout                                         |
-| `PROJECT_WORKSPACE_ROOT`                                |    —     | `packages`              | App-owned repository workspace                                   |
-| `SYSML_BACKEND_SCRATCH_PATH`                            |    —     | `backend-scratch`       | Temporary Git helper files for imports                           |
-| `BACKEND_LISTEN_HOST` / `BACKEND_LISTEN_PORT`           |    —     | `127.0.0.1` / `8765`    | Backend bind address and port                                    |
+| Variable                                                | Required | Default                   | Purpose                                                          |
+| ------------------------------------------------------- | :------: | ------------------------- | ---------------------------------------------------------------- |
+| `OPENAI_API_KEY`                                        |    ✅    | _blank_                   | Provider key used by the OpenCode runtime                        |
+| `DATABASE_URL`                                          |    ✅    | _blank_                   | Postgres connection string (set by Docker Compose automatically) |
+| `OPENCODE_BASE_URL`                                     |    —     | `http://127.0.0.1:4096`   | OpenCode server URL; leave blank to disable analysis             |
+| `OPENCODE_WORKSPACE_ROOT`                               |    —     | `/workspace/projects`     | Path OpenCode sees for project folders                           |
+| `OPENCODE_SERVER_USERNAME` / `OPENCODE_SERVER_PASSWORD` |    —     | `opencode` / _blank_      | OpenCode Basic auth credentials                                  |
+| `OPENCODE_PROVIDER_ID` / `OPENCODE_MODEL_ID`            |    —     | `openai` / `gpt-5.6-sol`  | OpenCode provider and model                                      |
+| `OPENCODE_REASONING_EFFORT`                             |    —     | `high`                    | GPT-5.6 Sol reasoning effort (`none` through `max`)              |
+| `OPENCODE_REASONING_SUMMARY`                            |    —     | `auto`                    | Request concise model reasoning summaries                        |
+| `OPENCODE_TIMEOUT_SECONDS`                              |    —     | `600`                     | Per-run OpenCode timeout                                         |
+| `TYPESAFE_API_KEY`                                      |    —     | _blank_                   | Enables optional Jev architecture classification                 |
+| `TYPESAFE_BASE_URL`                                     |    —     | `https://api.typesafe.ai` | TypeSafe API base URL                                            |
+| `JEV_MODEL`                                             |    —     | `jev-1.13.0`              | Pinned Jev classification model                                  |
+| `JEV_CONFIDENCE_THRESHOLD`                              |    —     | `0.80`                    | Below this, OpenCode performs the classification                 |
+| `JEV_TIMEOUT_SECONDS`                                   |    —     | `30`                      | TypeSafe API request timeout                                     |
+| `PROJECT_WORKSPACE_ROOT`                                |    —     | `packages`                | App-owned repository workspace                                   |
+| `SYSML_BACKEND_SCRATCH_PATH`                            |    —     | `backend-scratch`         | Temporary Git helper files for imports                           |
+| `BACKEND_LISTEN_HOST` / `BACKEND_LISTEN_PORT`           |    —     | `127.0.0.1` / `8765`      | Backend bind address and port                                    |
 
 </details>
+
+Jev is optional. When its key or SDK is absent, or a Jev request fails, the
+backend records that condition and sends the affected architecture decisions to
+the configured OpenCode model. Install the optional SDK for source development
+with `python -m pip install -e ".[jev]"`.
 
 > GitHub credentials are supplied through the UI at import/sync time, not via
 > environment variables. They are used transiently and **not stored**. For private
 > repositories, use an HTTPS URL and enter a token in the UI before importing.
+
+## Architecture classification
+
+Each scan builds a typed architecture inventory before SysML synthesis. Component
+keys use `component:<repository>` and dependency keys use
+`dependency:<source-component>:<topic>:<target>`. More than one dependency may
+share a topic; records combine only when their exact key matches or an explicit
+Jev/LLM identity decision says they represent the same logical dependency.
+
+Jev is an optional first pass. Confident typed decisions are accepted directly.
+Unknown, low-confidence, unavailable, and failed Jev decisions are passed to the
+configured OpenCode model. Every result retains its source, confidence, evidence
+references, and concise reasoning summary. The resolved inventory is available in
+`suite-evidence.json` and from `GET /api/runs/<run-id>/architecture`.
 
 # Local Development
 

@@ -40,6 +40,7 @@ def cycle_to_response(cycle: Any) -> dict[str, Any]:
         ],
         "opencodeSessionId": getattr(cycle, "opencode_session_id", None),
         "opencodeUsage": getattr(cycle, "opencode_usage", None) or {},
+        "architectureSummary": getattr(cycle, "architecture", {}).get("summary", {}),
     }
 
 

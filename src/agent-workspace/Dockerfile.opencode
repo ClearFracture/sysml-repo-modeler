@@ -7,6 +7,8 @@ RUN npm install -g opencode-ai
 ENV OPENCODE_CONFIG_DIR=/workspace/config
 ENV OPENCODE_LOG_LEVEL=INFO
 ENV OPENCODE_PRINT_LOGS=false
+ENV OPENCODE_REASONING_EFFORT=high
+ENV OPENCODE_REASONING_SUMMARY=auto
 
 COPY src/agent-workspace/opencode/opencode.json /workspace/config/opencode.json
 

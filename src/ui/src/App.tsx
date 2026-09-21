@@ -134,10 +134,18 @@ type BackendReviewSummary = {
   unchangedCount: number;
   usage: string;
   validation?: ValidationReview;
+  classifiedComponents: number;
+  classifiedDependencies: number;
 };
 
 type EvidencePayload = {
   records?: unknown[];
+  architecture?: {
+    summary?: {
+      componentCount?: number;
+      dependencyCount?: number;
+    };
+  };
 };
 
 type ChangesPayload = {
@@ -558,6 +566,8 @@ export default function App() {
           unchangedCount: changes?.unchangedCount ?? changes?.unchanged_count ?? fallbackUnchangedCount,
           usage: formatRunUsage(run),
           validation: validationReviewFromEvents(eventPayload?.events ?? []),
+          classifiedComponents: evidence?.architecture?.summary?.componentCount ?? 0,
+          classifiedDependencies: evidence?.architecture?.summary?.dependencyCount ?? 0,
         });
         setBackendLoadState({ status: 'loaded', message: `Loaded ${passId}` });
       } catch (error) {
@@ -917,6 +927,10 @@ export default function App() {
             {backendReviewSummary ? (
               <>
                 <div>{backendReviewSummary.evidenceRecords} evidence records</div>
+                <div>
+                  {backendReviewSummary.classifiedComponents} components / {backendReviewSummary.classifiedDependencies}{' '}
+                  dependencies classified
+                </div>
                 <div>{backendReviewSummary.unresolvedItems} unresolved</div>
                 <div>
                   {backendReviewSummary.changedCount} changed / {backendReviewSummary.unchangedCount} unchanged

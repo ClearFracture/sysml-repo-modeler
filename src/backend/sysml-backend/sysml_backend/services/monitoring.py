@@ -11,6 +11,11 @@ from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
 from ..utils import pick
+from .architecture import (
+    ArchitectureClassifier,
+    apply_llm_architecture_decisions,
+    finalize_architecture,
+)
 from .artifacts import ArtifactSet, ArtifactWriter
 from .evidence import build_repository_evidence
 from .opencode_client import OpenCodeClient
@@ -50,6 +55,7 @@ class MonitoringCycle:
     unchanged_count: int
     repositories: list[dict[str, Any]]
     artifacts: list[ArtifactSet]
+    architecture: dict[str, Any]
     opencode_session_id: str | None = None
     opencode_usage: dict[str, Any] | None = None
 
@@ -73,6 +79,7 @@ class MonitoringService:
         opencode_client: OpenCodeClient,
         opencode_workspace_root: str,
         analysis_store: AnalysisStore,
+        architecture_classifier: ArchitectureClassifier,
     ) -> None:
         self.workspaces = workspaces
         self.package_registry = package_registry
@@ -80,6 +87,7 @@ class MonitoringService:
         self.opencode_client = opencode_client
         self.opencode_workspace_root = opencode_workspace_root.rstrip("/")
         self.analysis_store = analysis_store
+        self.architecture_classifier = architecture_classifier
         self._inflight: set[str] = set()
         self._queue_lock = threading.Lock()
         self._queued_slugs: set[str] = set()
@@ -334,14 +342,6 @@ class MonitoringService:
         )
 
         artifact_sets: list[ArtifactSet] = []
-        self.event_store.append(
-            slug,
-            run_id,
-            "opencode",
-            "info",
-            "Sending SysMLv2 analysis request to OpenCode.",
-            entity=package_name,
-        )
         opencode_context = self._opencode_package_context(package, slug)
         evidence = build_repository_evidence(package, workspace.root)
         opencode_context["evidenceSummary"] = evidence.get("promptSummary", "")
@@ -360,6 +360,74 @@ class MonitoringService:
             entity=package_name,
             reasoning_summary=json.dumps(evidence.get("summary", {})),
         )
+        on_oc_event = self._make_opencode_event_callback(slug, run_id, package_name)
+        architecture = self.architecture_classifier.classify(package, evidence)
+        architecture_summary = architecture.get("summary", {})
+        classifier_status = architecture.get("classifier", {}).get("status", "unknown")
+        self.event_store.append(
+            slug,
+            run_id,
+            "architecture_classification",
+            "info",
+            (
+                f"Prepared {architecture_summary.get('componentCount', 0)} component(s) "
+                f"and {architecture_summary.get('dependencyCount', 0)} dependency "
+                f"candidate(s); Jev status is {classifier_status}."
+            ),
+            entity=package_name,
+            reasoning_summary=json.dumps(
+                {
+                    "classifier": architecture.get("classifier", {}),
+                    "summary": architecture_summary,
+                }
+            ),
+        )
+        if architecture_summary.get("unresolvedCount", 0):
+            self.event_store.append(
+                slug,
+                run_id,
+                "architecture_fallback",
+                "info",
+                (
+                    f"Sending {architecture_summary['unresolvedCount']} unresolved "
+                    "architecture decision(s) to OpenCode."
+                ),
+                entity=package_name,
+            )
+            fallback = self.opencode_client.resolve_architecture_classifications(
+                run_id, architecture, on_oc_event=on_oc_event
+            )
+            decisions = fallback.get("decisions", [])
+            architecture = apply_llm_architecture_decisions(
+                architecture,
+                decisions if isinstance(decisions, list) else [],
+            )
+            decision_status = architecture.get("llmFallback", {}).get("status")
+            transport_status = fallback.get("status", "error")
+            architecture["llmFallback"] = {
+                **architecture.get("llmFallback", {}),
+                "status": decision_status
+                if transport_status == "completed"
+                else transport_status,
+                "transportStatus": transport_status,
+                "sessionId": fallback.get("sessionId"),
+                "error": fallback.get("error"),
+                "usage": fallback.get("usage", {}),
+            }
+            self.event_store.append(
+                slug,
+                run_id,
+                "architecture_fallback",
+                "info" if transport_status == "completed" else "warn",
+                (
+                    f"OpenCode architecture fallback finished with status "
+                    f"{transport_status}."
+                ),
+                entity=package_name,
+                reasoning_summary=json.dumps(architecture.get("llmFallback", {})),
+            )
+        architecture = finalize_architecture(architecture)
+        opencode_context["architectureInventory"] = architecture
         for repository in opencode_context.get("repositories", []):
             if isinstance(repository, dict) and repository.get("path"):
                 self.event_store.append(
@@ -370,7 +438,14 @@ class MonitoringService:
                     f"OpenCode repository path: {repository['path']}",
                     entity=package_name,
                 )
-        on_oc_event = self._make_opencode_event_callback(slug, run_id, package_name)
+        self.event_store.append(
+            slug,
+            run_id,
+            "opencode",
+            "info",
+            "Sending the classified architecture inventory for SysMLv2 synthesis.",
+            entity=package_name,
+        )
         opencode_result = self.opencode_client.run_analysis(
             run_id, opencode_context, on_oc_event=on_oc_event
         )
@@ -397,6 +472,7 @@ class MonitoringService:
                 sysml_content,
                 validation=validation.to_json(),
                 evidence=evidence,
+                architecture=architecture,
             )
             artifact_sets.append(synthesis_artifact)
             self.event_store.append(
@@ -440,7 +516,9 @@ class MonitoringService:
                     "OpenCode is not configured; writing repository-metadata fallback.",
                     entity=package_name,
                 )
-            fallback_artifact = artifact_writer.write_fallback_sysml(run_id, package)
+            fallback_artifact = artifact_writer.write_fallback_sysml(
+                run_id, package, architecture=architecture
+            )
             artifact_sets.append(fallback_artifact)
             self.event_store.append(
                 slug,
@@ -472,6 +550,7 @@ class MonitoringService:
                 _repository_change(repository) for repository in repositories
             ],
             artifacts=artifact_sets,
+            architecture=architecture,
             opencode_session_id=opencode_session_id,
             opencode_usage=opencode_usage,
         )
@@ -519,7 +598,15 @@ class MonitoringService:
                     self._last_flush[key] = now
             if to_emit:
                 self.event_store.append(
-                    slug, run_id, phase, "info", to_emit, entity=entity
+                    slug,
+                    run_id,
+                    phase,
+                    "info",
+                    to_emit,
+                    entity=entity,
+                    reasoning_summary=to_emit
+                    if phase == "opencode_reasoning"
+                    else None,
                 )
 
         return _on_oc_event
@@ -686,7 +773,13 @@ class MonitoringService:
         for phase, text in to_emit.items():
             if text:
                 self.event_store.append(
-                    slug, run_id, phase, "info", text, entity=entity
+                    slug,
+                    run_id,
+                    phase,
+                    "info",
+                    text,
+                    entity=entity,
+                    reasoning_summary=text if phase == "opencode_reasoning" else None,
                 )
 
     def list_cycles(self) -> list[dict[str, Any]]:
@@ -697,6 +790,9 @@ class MonitoringService:
 
     def changes_for_run(self, run_id: str) -> dict[str, Any] | None:
         return self.analysis_store.changes_for_run(run_id)
+
+    def architecture_for_run(self, run_id: str) -> dict[str, Any] | None:
+        return self.analysis_store.architecture_for_run(run_id)
 
     def _append_cycle(self, slug: str, cycle: MonitoringCycle) -> None:
         self.analysis_store.save_cycle(slug, cycle)

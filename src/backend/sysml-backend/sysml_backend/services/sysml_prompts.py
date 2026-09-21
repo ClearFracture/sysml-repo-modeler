@@ -14,6 +14,7 @@ The model is built in two passes within one session:
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 
@@ -194,6 +195,9 @@ def analysis_user_prompt(package_context: dict[str, Any]) -> str:
                 f"- {requirement}"
                 for requirement in _coverage_requirements(package_context)
             ],
+            "",
+            "Classified architecture inventory:",
+            _architecture_inventory(package_context),
         ]
     )
 
@@ -231,6 +235,9 @@ def enrichment_prompt(package_context: dict[str, Any], system_map: str) -> str:
                 f"- {requirement}"
                 for requirement in _coverage_requirements(package_context)
             ],
+            "",
+            "Classified architecture inventory:",
+            _architecture_inventory(package_context),
             "",
             "For each component, using evidence from its repository:",
             "- Define purpose: add a `doc` as the FIRST line inside its `{ }` block, stating in one",
@@ -365,3 +372,17 @@ def _coverage_requirements(package_context: dict[str, Any]) -> list[str]:
     if not isinstance(requirements, list):
         return []
     return [str(requirement) for requirement in requirements if requirement]
+
+
+def _architecture_inventory(package_context: dict[str, Any]) -> str:
+    inventory = package_context.get("architectureInventory")
+    if not isinstance(inventory, dict):
+        return "No classified architecture inventory is available."
+    return json.dumps(
+        {
+            "components": inventory.get("components", []),
+            "dependencies": inventory.get("dependencies", []),
+            "unresolved": inventory.get("unresolved", []),
+        },
+        separators=(",", ":"),
+    )

@@ -33,6 +33,9 @@ asgi = [
   "fastapi>=0.110",
   "uvicorn[standard]>=0.29",
 ]
+jev = [
+  "typesafe-sdk>=0.7.1,<1",
+]
 dev = [
   "detect-secrets==1.5.0",
   "pre-commit==4.5.0",

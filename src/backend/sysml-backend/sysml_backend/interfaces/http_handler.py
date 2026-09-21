@@ -228,6 +228,20 @@ class SysmlBackendHandler(BaseHTTPRequestHandler):
             return
         self.respond_json(changes)
 
+    def get_run_architecture(self, match: Match[str]) -> None:
+        run_id = match.group("run_id")
+        architecture = self.server.monitoring_service.architecture_for_run(run_id)
+        if architecture is None:
+            self.respond_json(
+                {
+                    "error": "not_found",
+                    "message": f"Architecture inventory for run {run_id} was not found.",
+                },
+                status=HTTPStatus.NOT_FOUND,
+            )
+            return
+        self.respond_json({"runId": run_id, "architecture": architecture})
+
     def get_artifact(self, match: Match[str]) -> None:
         run_id = match.group("run_id")
         pass_id = match.group("pass_id")
@@ -774,6 +788,10 @@ SysmlBackendHandler._GET_ROUTES = _compile(
         ),
         (rf"/api/runs/(?P<run_id>{_SAFE_SEGMENT})/events", "get_run_events"),
         (rf"/api/runs/(?P<run_id>{_SAFE_SEGMENT})/changes", "get_run_changes"),
+        (
+            rf"/api/runs/(?P<run_id>{_SAFE_SEGMENT})/architecture",
+            "get_run_architecture",
+        ),
         (
             rf"/api/runs/(?P<run_id>{_SAFE_SEGMENT})/passes/(?P<pass_id>{_SAFE_SEGMENT})"
             rf"/artifacts/(?P<artifact_name>{_SAFE_SEGMENT})",

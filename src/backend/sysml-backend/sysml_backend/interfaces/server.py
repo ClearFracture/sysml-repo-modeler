@@ -7,6 +7,8 @@ from http.server import ThreadingHTTPServer
 
 from ..services import (
     AnalysisStore,
+    ArchitectureClassifier,
+    ArchitectureClassifierConfig,
     MonitoringService,
     OpenCodeClient,
     OpenCodeConfig,
@@ -41,6 +43,7 @@ class Services:
     monitoring_service: MonitoringService
     workspaces: WorkspaceManager
     config: BackendConfig
+    architecture_classifier: ArchitectureClassifier
 
 
 def build_services(config: BackendConfig) -> Services:
@@ -63,6 +66,15 @@ def build_services(config: BackendConfig) -> Services:
             agent=config.opencode_agent,
         )
     )
+    architecture_classifier = ArchitectureClassifier(
+        ArchitectureClassifierConfig(
+            api_key=config.typesafe_api_key,
+            base_url=config.typesafe_base_url,
+            model=config.jev_model,
+            confidence_threshold=config.jev_confidence_threshold,
+            timeout_seconds=config.jev_timeout_seconds,
+        )
+    )
     monitoring_service = MonitoringService(
         workspaces,
         package_registry,
@@ -70,6 +82,7 @@ def build_services(config: BackendConfig) -> Services:
         opencode_client,
         config.opencode_workspace_root,
         analysis_store,
+        architecture_classifier,
     )
     return Services(
         package_registry=package_registry,
@@ -81,6 +94,7 @@ def build_services(config: BackendConfig) -> Services:
         monitoring_service=monitoring_service,
         workspaces=workspaces,
         config=config,
+        architecture_classifier=architecture_classifier,
     )
 
 
