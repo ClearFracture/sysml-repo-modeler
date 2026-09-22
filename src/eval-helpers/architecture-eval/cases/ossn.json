@@ -5,16 +5,14 @@
     "name": "opensource-socialnetwork",
     "role": "application",
     "url": "https://github.com/opensource-socialnetwork/opensource-socialnetwork",
-    "commit": "8396444428fc488117406f6bc7799203f7e5dd1c"
+    "commit": "8396444428f"
   },
   "classifier": {
     "model": "jev-1.13.0",
     "confidenceThreshold": 0.8
   },
   "expectedCandidates": {
-    "components": [
-      "component:opensource_socialnetwork"
-    ],
+    "components": ["component:opensource_socialnetwork"],
     "dependencies": [
       "dependency:component_opensource_socialnetwork:cache:memcached",
       "dependency:component_opensource_socialnetwork:cache:redis",

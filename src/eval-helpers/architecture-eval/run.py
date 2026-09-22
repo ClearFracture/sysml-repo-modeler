@@ -70,7 +70,7 @@ def main() -> int:
         raise SystemExit(f"Repository does not exist: {repo}")
     repository_commit = _repository_commit(repo)
     expected_commit = str(case["repository"].get("commit") or "")
-    if expected_commit and repository_commit != expected_commit:
+    if expected_commit and not repository_commit.startswith(expected_commit):
         raise SystemExit(
             f"Repository commit {repository_commit} does not match case commit "
             f"{expected_commit}"
