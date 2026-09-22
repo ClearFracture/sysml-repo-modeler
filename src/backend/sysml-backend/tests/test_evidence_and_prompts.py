@@ -46,6 +46,55 @@ def test_documentation_and_ci_mentions_are_not_required_coverage(tmp_path: Path)
     )
 
 
+def test_changelogs_licenses_and_vendored_sources_do_not_create_runtime_signals(
+    tmp_path: Path,
+):
+    repo = tmp_path / "repos" / "demo"
+    (repo / "licenses").mkdir(parents=True)
+    (repo / "vendors" / "editor").mkdir(parents=True)
+    (repo / "ChangeLog.txt").write_text("Redis support was fixed.\n", encoding="utf-8")
+    (repo / "licenses" / "LICENSE.txt").write_text(
+        "LIABILITY ARISING FROM USE.\n", encoding="utf-8"
+    )
+    (repo / "vendors" / "editor" / "types.ts").write_text(
+        "host: string;\n", encoding="utf-8"
+    )
+
+    evidence = build_repository_evidence(
+        {"repositories": [{"name": "demo", "path": "repos/demo"}]}, tmp_path
+    )
+
+    assert evidence["records"] == [
+        {
+            "category": "cache",
+            "kind": "redis",
+            "name": "Redis",
+            "repository": "demo",
+            "repositoryRole": None,
+            "path": "ChangeLog.txt",
+            "line": 1,
+            "excerpt": "Redis support was fixed.",
+            "context": "documentation",
+            "confidence": "low",
+        }
+    ]
+
+
+def test_php_sources_are_scanned_for_runtime_dependency_evidence(tmp_path: Path):
+    repo = tmp_path / "repos" / "demo"
+    repo.mkdir(parents=True)
+    (repo / "database.php").write_text(
+        "$connection = getenv('MYSQL_HOST');\n", encoding="utf-8"
+    )
+
+    evidence = build_repository_evidence(
+        {"repositories": [{"name": "demo", "path": "repos/demo"}]}, tmp_path
+    )
+
+    assert evidence["records"][0]["category"] == "database"
+    assert evidence["records"][0]["confidence"] == "medium"
+
+
 def test_platform_repository_owns_required_multi_repo_coverage(tmp_path: Path):
     platform = tmp_path / "repos" / "platform"
     service = tmp_path / "repos" / "service"

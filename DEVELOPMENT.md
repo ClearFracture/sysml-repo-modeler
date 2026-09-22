@@ -73,7 +73,7 @@ Install backend dependencies and run migrations:
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev,asgi]"
+python -m pip install -e ".[dev,asgi,jev]"
 .\.venv\Scripts\alembic.exe upgrade head
 ```
 

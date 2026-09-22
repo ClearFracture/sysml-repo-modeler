@@ -40,6 +40,22 @@ def runtime_status(services: Services) -> dict[str, object]:
         },
         "projectWorkspace": project_workspace,
         "opencode": opencode,
+        "jev": {
+            "configured": services.architecture_classifier.configured,
+            "available": services.architecture_classifier.available,
+            "status": (
+                "ok"
+                if services.architecture_classifier.configured
+                and services.architecture_classifier.available
+                else (
+                    "unavailable"
+                    if services.architecture_classifier.configured
+                    else "unconfigured"
+                )
+            ),
+            "model": config.jev_model,
+            "confidenceThreshold": config.jev_confidence_threshold,
+        },
     }
 
 

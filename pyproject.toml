@@ -32,6 +32,9 @@ Issues = "https://github.com/ClearFracture/Project-Analyzer/issues"
 [project.optional-dependencies]
 # Optional ASGI front end. The default `python -m sysml_backend` server needs none of these.
 asgi = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
+jev = [
+  "typesafe-sdk>=0.7.1,<1",
+]
 dev = [
     "detect-secrets==1.5.0",
     "fastapi>=0.110",

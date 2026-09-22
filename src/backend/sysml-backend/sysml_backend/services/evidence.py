@@ -13,6 +13,7 @@ _TEXT_SUFFIXES = {
     ".ini",
     ".json",
     ".md",
+    ".php",
     ".properties",
     ".py",
     ".sh",
@@ -35,6 +36,8 @@ _SKIP_DIRS = {
     "dist",
     "node_modules",
     "target",
+    "vendor",
+    "vendors",
 }
 
 _NON_RUNTIME_PATH_PARTS = {
@@ -54,6 +57,7 @@ _NON_RUNTIME_PATH_PARTS = {
     "tests",
 }
 _DOCUMENTATION_FILENAMES = {
+    "changelog.txt",
     "changelog.md",
     "contributing.md",
     "history.md",
@@ -89,7 +93,7 @@ _SIGNALS: list[tuple[str, str, re.Pattern[str]]] = [
         "database",
         "postgresql",
         re.compile(
-            r"\b(POSTGRES|POSTGRESQL|PGHOST|PGPORT|DATABASE_URL|JDBC_DATABASE_URL)\b",
+            r"\b((?:[A-Z0-9]+_)*(?:DATABASE_URL|JDBC_DATABASE_URL)|POSTGRES|POSTGRESQL|PGHOST|PGPORT)\b",
             re.I,
         ),
     ),
@@ -101,10 +105,17 @@ _SIGNALS: list[tuple[str, str, re.Pattern[str]]] = [
     (
         "messaging",
         "rabbitmq",
-        re.compile(r"\b(RABBITMQ|AMQP|AMQPS|CELERY_BROKER|MESSAGE_BROKER)\b", re.I),
+        re.compile(
+            r"\b((?:[A-Z0-9]+_)*(?:AMQP|AMQPS|CELERY_BROKER|MESSAGE_BROKER)|RABBITMQ)\b",
+            re.I,
+        ),
     ),
     ("messaging", "kafka", re.compile(r"\b(KAFKA|BOOTSTRAP_SERVERS)\b", re.I)),
-    ("cache", "redis", re.compile(r"\b(REDIS|REDIS_URL|CACHE_URL)\b", re.I)),
+    (
+        "cache",
+        "redis",
+        re.compile(r"\b((?:[A-Z0-9]+_)*(?:REDIS_URL|CACHE_URL)|REDIS)\b", re.I),
+    ),
     ("cache", "memcached", re.compile(r"\b(MEMCACHED|MEMCACHE)\b", re.I)),
     (
         "search",
@@ -162,6 +173,13 @@ _SIGNALS: list[tuple[str, str, re.Pattern[str]]] = [
             r"\b(SHAREPOINT|MICROSOFT_TEAMS|TEAMS_WEBHOOK|SLACK_WEBHOOK)\b", re.I
         ),
     ),
+    (
+        "service",
+        "service_endpoint",
+        re.compile(
+            r"\b([A-Z][A-Z0-9_]*(?:_BASE_URL|_SERVICE_URL|_API_URL|_ENDPOINT|_SERVICE_HOST))\b"
+        ),
+    ),
 ]
 
 _CATEGORY_LABELS = {
@@ -176,6 +194,7 @@ _CATEGORY_LABELS = {
     "observability": "observability",
     "port": "network port",
     "search": "search service",
+    "service": "application service dependency",
     "secret": "secrets",  # pragma: allowlist secret
     "storage": "storage",
     "vector": "vector store",
@@ -346,6 +365,13 @@ def _scan_file(
             match = regex.search(sanitized)
             if not match:
                 continue
+            if kind == "docker" and not _is_architecture_file(relative_path):
+                continue
+            if category in {"ingress", "port"} and context not in {
+                "configuration",
+                "deployment",
+            }:
+                continue
             records.append(
                 {
                     "category": category,
@@ -444,7 +470,13 @@ def _evidence_context(path: Path) -> str:
     filename = path.name.lower()
     if any(_is_non_runtime_name(part) for part in (*path.parts[:-1], filename)):
         return "non_runtime"
-    if filename in _DOCUMENTATION_FILENAMES or path.suffix.lower() == ".md":
+    if (
+        filename in _DOCUMENTATION_FILENAMES
+        or filename.startswith(("changelog.", "history.", "license."))
+        or filename.endswith((".license", ".license.txt"))
+        or filename in {"copying", "license", "notice"}
+        or path.suffix.lower() == ".md"
+    ):
         return "documentation"
     if _is_architecture_file(path):
         return "deployment"

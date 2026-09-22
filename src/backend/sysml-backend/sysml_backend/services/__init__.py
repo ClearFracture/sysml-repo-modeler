@@ -3,6 +3,12 @@
 from __future__ import annotations
 
 from .analysis_store import AnalysisStore
+from .architecture import (
+    ArchitectureClassifier,
+    ArchitectureClassifierConfig,
+    apply_llm_architecture_decisions,
+    finalize_architecture,
+)
 from .artifacts import ArtifactSet, ArtifactWriter
 from .monitoring import MonitoringService, MonitorInProgressError
 from .opencode_client import OpenCodeClient, OpenCodeConfig, health_to_json
@@ -45,6 +51,10 @@ __all__ = [
     "ArtifactSet",
     "ArtifactWriter",
     "AnalysisStore",
+    "ArchitectureClassifier",
+    "ArchitectureClassifierConfig",
+    "apply_llm_architecture_decisions",
+    "finalize_architecture",
     "MonitoringService",
     "MonitorInProgressError",
     "OpenCodeClient",

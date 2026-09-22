@@ -24,6 +24,11 @@ class BackendConfig:
     opencode_provider_id: str | None = None
     opencode_agent: str | None = None
     opencode_workspace_root: str = "packages"
+    typesafe_api_key: str | None = None
+    typesafe_base_url: str = "https://api.typesafe.ai"
+    jev_model: str = "jev-1.13.0"
+    jev_confidence_threshold: float = 0.8
+    jev_timeout_seconds: float = 30.0
     telemetry_export_root: Path | None = None
 
 
@@ -64,6 +69,15 @@ def load_config() -> BackendConfig:
         # The path the OpenCode container sees as the project workspace root.
         opencode_workspace_root=os.environ.get("OPENCODE_WORKSPACE_ROOT")
         or "/workspace/projects",
+        typesafe_api_key=os.environ.get("TYPESAFE_API_KEY") or None,
+        typesafe_base_url=os.environ.get(
+            "TYPESAFE_BASE_URL", "https://api.typesafe.ai"
+        ),
+        jev_model=os.environ.get("JEV_MODEL", "jev-1.13.0"),
+        jev_confidence_threshold=float(
+            os.environ.get("JEV_CONFIDENCE_THRESHOLD", "0.80")
+        ),
+        jev_timeout_seconds=float(os.environ.get("JEV_TIMEOUT_SECONDS", "30")),
         telemetry_export_root=_telemetry_export_root(base),
     )
 

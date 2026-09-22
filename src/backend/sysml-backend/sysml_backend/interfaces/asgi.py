@@ -180,6 +180,17 @@ def _register_routes(app: FastAPI, services: Services) -> None:
             return _error(404, "not_found", f"Run {run_id} was not found.")
         return changes
 
+    @app.get("/api/runs/{run_id}/architecture")
+    def run_architecture(run_id: str) -> Any:
+        architecture = services.monitoring_service.architecture_for_run(run_id)
+        if architecture is None:
+            return _error(
+                404,
+                "not_found",
+                f"Architecture inventory for run {run_id} was not found.",
+            )
+        return {"runId": run_id, "architecture": architecture}
+
     @app.get("/api/telemetry/runs")
     def telemetry_runs() -> Any:
         return {"runs": services.monitoring_service.list_telemetry_runs()}

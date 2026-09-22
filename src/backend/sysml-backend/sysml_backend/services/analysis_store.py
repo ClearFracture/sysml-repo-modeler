@@ -222,6 +222,16 @@ class AnalysisStore:
                                 _read_text(artifact.unresolved_services_path),
                             ),
                         )
+                    cursor.execute(
+                        """
+                        insert into run_architecture (run_id, inventory, updated_at)
+                        values (%s, %s, now())
+                        on conflict (run_id) do update set
+                          inventory = excluded.inventory,
+                          updated_at = now()
+                        """,
+                        (cycle.run_id, Jsonb(cycle.architecture)),
+                    )
                 connection.commit()
             except Exception:
                 connection.rollback()
@@ -276,6 +286,21 @@ class AnalysisStore:
             "unchangedCount": run.get("unchangedCount", 0),
             "repositories": repositories,
         }
+
+    def architecture_for_run(self, run_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            connection = self._connect()
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select inventory from run_architecture where run_id = %s",
+                    (run_id,),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        if row is None:
+            return None
+        inventory = row[0]
+        return inventory if isinstance(inventory, dict) else None
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
         runs = self.list_runs()

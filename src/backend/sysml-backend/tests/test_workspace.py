@@ -131,7 +131,13 @@ def test_project_registry_per_package(tmp_path):
 def test_one_active_run_global_lock(tmp_path):
     manager = _manager(tmp_path)
     service = MonitoringService(
-        manager, None, None, None, "packages", _MissingAnalysisStore()
+        manager,
+        None,
+        None,
+        None,
+        "packages",
+        _MissingAnalysisStore(),
+        _MissingArchitectureClassifier(),
     )
     assert service._claim("alpha") is True
     assert service._claim("alpha") is False  # already in flight
@@ -149,6 +155,7 @@ def test_start_cycle_rejects_when_in_flight(tmp_path):
         None,
         "packages",
         _MissingAnalysisStore(),
+        _MissingArchitectureClassifier(),
     )
     service._claim("demo")  # simulate an in-flight run for slug "demo"
     try:
@@ -190,3 +197,8 @@ class _MissingAnalysisStore:
 
     def save_cycle(self, project_slug, cycle):  # noqa: ANN001, ARG002
         raise AssertionError("save_cycle should not be reached")
+
+
+class _MissingArchitectureClassifier:
+    def classify(self, package, evidence):  # noqa: ANN001, ARG002
+        raise AssertionError("classify should not be reached")
