@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "id": "ossn-8396444",
+  "repository": {
+    "name": "opensource-socialnetwork",
+    "role": "application",
+    "url": "https://github.com/opensource-socialnetwork/opensource-socialnetwork",
+    "commit": "8396444428fc488117406f6bc7799203f7e5dd1c"
+  },
+  "classifier": {
+    "model": "jev-1.13.0",
+    "confidenceThreshold": 0.8
+  },
+  "expectedCandidates": {
+    "components": [
+      "component:opensource_socialnetwork"
+    ],
+    "dependencies": [
+      "dependency:component_opensource_socialnetwork:cache:memcached",
+      "dependency:component_opensource_socialnetwork:cache:redis",
+      "dependency:component_opensource_socialnetwork:database:mysql"
+    ]
+  },
+  "decisions": [
+    {
+      "key": "component:opensource_socialnetwork",
+      "kind": "component_classification",
+      "expected": "frontend"
+    },
+    {
+      "key": "dependency:component_opensource_socialnetwork:cache:memcached",
+      "kind": "dependency_classification",
+      "expected": "cache"
+    },
+    {
+      "key": "dependency:component_opensource_socialnetwork:cache:redis",
+      "kind": "dependency_classification",
+      "expected": "cache"
+    },
+    {
+      "key": "dependency:component_opensource_socialnetwork:database:mysql",
+      "kind": "dependency_classification",
+      "expected": "runtime_database"
+    },
+    {
+      "key": "dependency:component_opensource_socialnetwork:identity:jwt",
+      "kind": "dependency_classification",
+      "expected": "unknown"
+    },
+    {
+      "key": "dependency:component_opensource_socialnetwork:identity:oauth",
+      "kind": "dependency_classification",
+      "expected": "unknown"
+    },
+    {
+      "key": "dependency_identity:dependency:component_opensource_socialnetwork:identity:jwt|dependency:component_opensource_socialnetwork:identity:oauth",
+      "kind": "dependency_identity",
+      "expected": false
+    }
+  ],
+  "sysmlConcepts": [
+    {
+      "id": "web-host",
+      "patterns": ["WebServer", "ApachePhpHost"],
+      "evidencePaths": ["installation/configs/htaccess.dist", "index.php"]
+    },
+    {
+      "id": "browser-client",
+      "patterns": ["BrowserFrontend", "Browser", "Frontend"],
+      "evidencePaths": ["components/OssnLocation/plugins/default/js/ossn_location.php"]
+    },
+    {
+      "id": "application-runtime",
+      "patterns": ["WebApplication", "Runtime"],
+      "evidencePaths": ["index.php"]
+    },
+    {
+      "id": "bootstrap",
+      "patterns": ["BootstrapLoader", "Bootstrap"],
+      "evidencePaths": ["system/start.php"]
+    },
+    {
+      "id": "routing",
+      "patterns": ["PageRouter", "routing", "route"],
+      "evidencePaths": ["libraries/ossn.lib.route.php"]
+    },
+    {
+      "id": "action-dispatch",
+      "patterns": ["ActionDispatcher", "action dispatch", "action"],
+      "evidencePaths": ["libraries/ossn.lib.actions.php"]
+    },
+    {
+      "id": "component-registry",
+      "patterns": ["RuntimeRegistry", "ComponentRegistry", "component registry"],
+      "evidencePaths": ["libraries/ossn.lib.components.php"]
+    },
+    {
+      "id": "session-auth",
+      "patterns": ["SessionAuthentication", "session auth", "authentication"],
+      "evidencePaths": ["classes/OssnSession.php"]
+    },
+    {
+      "id": "persistence",
+      "patterns": ["PersistenceLayer", "persistence", "database"],
+      "evidencePaths": ["classes/OssnDatabase.php"]
+    },
+    {
+      "id": "filesystem-storage",
+      "patterns": ["FilesystemStorage", "LocalFileStorage", "file storage"],
+      "evidencePaths": ["libraries/ossn.lib.file.php"]
+    },
+    {
+      "id": "mail",
+      "patterns": ["MailAdapter", "PhpMailFacility", "mail"],
+      "evidencePaths": ["classes/OssnMail.php"]
+    },
+    {
+      "id": "cli-runtime",
+      "patterns": ["CliJobRuntime", "CLI", "command line"],
+      "evidencePaths": ["system/handlers/cli"]
+    },
+    {
+      "id": "update-checker",
+      "patterns": ["UpdateChecker", "update check"],
+      "evidencePaths": ["libraries/ossn.lib.system.php"]
+    },
+    {
+      "id": "github-api",
+      "patterns": ["GitHubApi", "api\\.github\\.com"],
+      "evidencePaths": ["libraries/ossn.lib.system.php"]
+    },
+    {
+      "id": "nominatim-api",
+      "patterns": ["Nominatim", "nominatim\\.openstreetmap\\.org"],
+      "evidencePaths": ["components/OssnLocation/plugins/default/js/ossn_location.php"]
+    },
+    {
+      "id": "mysql",
+      "patterns": ["MySQL", "MariaDB"],
+      "evidencePaths": ["classes/OssnDatabase.php"]
+    }
+  ]
+}
